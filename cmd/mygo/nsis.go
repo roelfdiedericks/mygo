@@ -163,6 +163,12 @@ func writeInstaller(c *Config, stage, work, exe, goarch string, installed []stri
 	if err != nil {
 		return "", err
 	}
+	// The app's own script, with its macros customInstall and
+	// customUninstall; MUI2 comes first, for it to use.
+	custom := ""
+	if s := c.Windows.InstallerScript; s != "" {
+		custom = "!include " + nsisString(c.path(s)) + "\n"
+	}
 	script := `Unicode true
 ManifestDPIAware true
 SetCompressor /SOLID lzma
@@ -176,7 +182,7 @@ BrandingText " "
 !define MUI_FINISHPAGE_SHOWREADME_TEXT "Create a desktop shortcut"
 !define MUI_FINISHPAGE_SHOWREADME_FUNCTION CreateDesktopShortcut
 !include "MUI2.nsh"
-!insertmacro MUI_PAGE_DIRECTORY
+` + custom + `!insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
 !insertmacro MUI_PAGE_FINISH
 !insertmacro MUI_UNPAGE_CONFIRM
@@ -189,7 +195,10 @@ Section
   SetOutPath "$INSTDIR"
 ` + files.String() + `  WriteUninstaller "$INSTDIR\Uninstall.exe"
   CreateShortCut "$SMPROGRAMS\` + shortcut + `" "$INSTDIR\` + nsisEscape(exe) + `"
-` + nsisUninstallEntry(c, uninstallKey, exe) + register + `SectionEnd
+` + nsisUninstallEntry(c, uninstallKey, exe) + register + `!ifmacrodef customInstall
+  !insertmacro customInstall
+!endif
+SectionEnd
 
 ; The finish page offers it, so silent installs (/S) make none.
 Function CreateDesktopShortcut
@@ -221,6 +230,9 @@ FunctionEnd
 Section "Uninstall"
   Push "$INSTDIR"
   Call un.CloseApp
+!ifmacrodef customUninstall
+  !insertmacro customUninstall
+!endif
   Push "$SMPROGRAMS\` + shortcut + `"
   Call un.DeleteShortcut
   Push "$DESKTOP\` + shortcut + `"

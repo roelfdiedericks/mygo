@@ -391,6 +391,34 @@ its SHA-256 and kept in `%LOCALAPPDATA%\mygo`. On macOS and
 Linux, install NSIS to make Windows installers (`brew install makensis`,
 `apt install nsis`); without it, `mygo build` skips the installer.
 
+`windows.installerScript` adds the app's own steps: an NSIS script the
+installer includes after MUI2, which may define two macros.
+`customInstall` runs as the install ends, once the files, shortcuts and
+registrations are in place; `customUninstall` runs as the uninstall
+begins, while the app's folder is still there. Either may be left out,
+and the script may define functions, pages and strings of its own. It
+runs as the user, as the rest of the installer does. For example, to put
+a command on the user's `PATH`:
+
+```nsis
+; build/installer.nsh
+!macro customInstall
+  CreateDirectory "$INSTDIR\bin"
+  FileOpen $0 "$INSTDIR\bin\myapp.cmd" w
+  FileWrite $0 '@"%~dp0..\My App.exe" %*$\r$\n'
+  FileClose $0
+  ; and add $INSTDIR\bin to HKCU\Environment\Path
+!macroend
+
+!macro customUninstall
+  ; remove $INSTDIR\bin from HKCU\Environment\Path
+!macroend
+```
+
+```json
+{ "windows": { "installerScript": "build/installer.nsh" } }
+```
+
 ### Code signing
 
 Unsigned apps make SmartScreen warn users. Sign the executable, the

@@ -31,6 +31,12 @@ type Windows struct {
 	// TimestampURL is the RFC 3161 time stamping server of Certificate
 	// (default http://timestamp.digicert.com).
 	TimestampURL string `json:"timestampUrl"`
+	// InstallerScript is an NSIS script the installer includes, which
+	// defines the macros customInstall, run as the install ends, and
+	// customUninstall, run as the uninstall begins while the app's folder
+	// is still there; either may be left out. It runs as the user, as the
+	// rest of the installer does.
+	InstallerScript string `json:"installerScript"`
 }
 
 func (w *Windows) signs() bool { return w.Certificate != "" || w.SignCommand != "" }

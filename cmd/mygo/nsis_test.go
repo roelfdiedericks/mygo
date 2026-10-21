@@ -261,6 +261,75 @@ func uninstall(t *testing.T, dir string) {
 	}
 }
 
+// TestWindowsInstallerScript builds an installer with an app's script,
+// whose customInstall writes a file beside the app's folder and whose
+// customUninstall finds the app's files still there and writes another.
+// Without NSIS it is skipped; elsewhere than on Windows it only builds.
+func TestWindowsInstallerScript(t *testing.T) {
+	if testing.Short() {
+		t.Skip("compiles programs")
+	}
+	if tool, err := nsisCompiler(); err != nil {
+		t.Fatal(err)
+	} else if tool == "" {
+		t.Skip("NSIS is not installed")
+	}
+	dir := testModule(t, map[string]string{
+		"main.go":   "package main\n\nfunc main() {}\n",
+		"mygo.json": `{"name": "Script Test", "identifier": "com.example.scripttest", "version": "1.0.0", "windows": {"installerScript": "build/installer.nsh"}}`,
+		"build/installer.nsh": `!macro customInstall
+  FileOpen $0 "$INSTDIR\..\installed.txt" w
+  FileWrite $0 "$INSTDIR"
+  FileClose $0
+!macroend
+!macro customUninstall
+  IfFileExists "$INSTDIR\Script Test.exe" 0 +3
+    FileOpen $0 "$INSTDIR\..\uninstalled.txt" w
+    FileClose $0
+!macroend
+`,
+	})
+	c, err := loadConfig(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	opts := buildOptions{sign: "-", work: t.TempDir()}
+	if opts.pkg, err = packageDir(c); err != nil {
+		t.Fatal(err)
+	}
+	artifacts, err := buildPlatform(c, "windows", "amd64", opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if runtime.GOOS != "windows" || runtime.GOARCH != "amd64" {
+		return
+	}
+	parent := t.TempDir()
+	install := filepath.Join(parent, "ScriptTest")
+	if out, err := exec.Command(artifacts[len(artifacts)-1], "/S", "/D="+install).CombinedOutput(); err != nil {
+		t.Fatalf("installing: %v\n%s", err, out)
+	}
+	if b, err := os.ReadFile(filepath.Join(parent, "installed.txt")); err != nil || string(b) != install {
+		t.Errorf("customInstall wrote %q, %v; want the install folder %q", b, err, install)
+	}
+	uninstall(t, install)
+	if !fileExists(filepath.Join(parent, "uninstalled.txt")) {
+		t.Error("customUninstall did not run before the app's folder was removed")
+	}
+}
+
+// TestInstallerScriptMissing: a script that is not there fails the
+// configuration, not makensis later.
+func TestInstallerScriptMissing(t *testing.T) {
+	dir := testModule(t, map[string]string{
+		"main.go":   "package main\n\nfunc main() {}\n",
+		"mygo.json": `{"name": "Script Test", "windows": {"installerScript": "missing.nsh"}}`,
+	})
+	if _, err := loadConfig(dir); err == nil || !strings.Contains(err.Error(), "windows.installerScript missing.nsh does not exist") {
+		t.Errorf("loadConfig: %v", err)
+	}
+}
+
 // TestWindowsSigning signs a build with a throwaway self-signed
 // certificate. It runs on CI only (MYGO_TEST_SIGN), as it adds the
 // certificate to the user's store for a moment.

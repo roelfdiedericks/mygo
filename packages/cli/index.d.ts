@@ -248,6 +248,8 @@ export interface WindowsConfig {
   signCommand?: string;
   /** The time stamping server of `certificate` (default: `http://timestamp.digicert.com`). */
   timestampUrl?: string;
+  /** An NSIS script the installer includes, defining the macros `customInstall` (as the install ends) and `customUninstall` (as the uninstall begins). */
+  installerScript?: string;
 }
 
 /** Linux packaging. */

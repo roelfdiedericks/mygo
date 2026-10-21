@@ -293,6 +293,9 @@ func (c *Config) validate() error {
 	if c.Slug != "" && !slugRe.MatchString(c.Slug) {
 		return fmt.Errorf("slug %q is not a slug (lower-case letters and digits, with single hyphens between them)", c.Slug)
 	}
+	if s := c.Windows.InstallerScript; s != "" && !fileExists(c.path(s)) {
+		return fmt.Errorf("windows.installerScript %s does not exist", s)
+	}
 	if cmd := c.Linux.Command; cmd != "" && !commandRe.MatchString(cmd) {
 		return fmt.Errorf("linux.command %q is not a command name (a letter or digit, then letters, digits, ., _, + or -)", cmd)
 	}

@@ -132,6 +132,7 @@ See [macOS](distribution.md#macos).
 | `certificate` | | a code signing certificate (`.pfx`) for the executable, the unsigned executables and libraries among the resources, and the installer; its password comes from `MYGO_WINDOWS_CERTIFICATE_PASSWORD` |
 | `signCommand` | | instead of `certificate`, a command that signs a file, with `%1` for its path |
 | `timestampUrl` | `http://timestamp.digicert.com` | the time stamping server of `certificate` |
+| `installerScript` | | an NSIS script the installer includes, defining the macros `customInstall` and `customUninstall` (see [The installer](distribution.md#the-installer)) |
 
 See [Windows](distribution.md#windows).
 
