@@ -188,6 +188,14 @@ type Options struct {
 	// when zero; a negative limit refuses images, for programs to show
 	// something else.
 	ImageLimit int64
+	// AppImages is a range of image ids (Kitty graphics) that the app
+	// places itself, to draw something of its own in the terminal where
+	// a placement is: a widget under a prompt's output, which scrolls and
+	// reflows with the rows as an image does. The view draws no image of
+	// these ids; AppPlacements reports where they are. An app places one
+	// by feeding the terminal a transmit of a 1×1 image with the id and a
+	// placement over the cells it takes (c=cols,r=rows); see the docs.
+	AppImages struct{ First, Last uint32 }
 
 	// OnTitle, OnExit, OnBell and OnNotify run on a goroutine of the
 	// terminal when a program sets the title, when the program (or Conn)

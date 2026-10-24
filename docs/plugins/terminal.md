@@ -511,7 +511,8 @@ The terminal's methods are safe from any goroutine:
 - `HoveredLink` returns the link Command (Control elsewhere) is held over
   in the view, as `OpenLink` takes it, whether it is a file path, and the
   rectangle of its cells relative to the view: read it after `View` to
-  show a preview of the link over the view.
+  show a preview of the link over the view. `CellRect` returns the
+  rectangle of any cell, by column and row of the screen, the same way.
 - `SetFont` and `SetTheme` change the font and the colors; `SetFont` also
   sets the size a zoom resets to, and drops the zoom.
 - `Resize` sets the size of a terminal no view shows, and `Snapshot`
@@ -534,6 +535,40 @@ term, err := terminal.New(terminal.Options{Conn: session})
 
 A terminal whose `Conn` never sends anything shows what the app writes
 with `Feed`, as a log with colors would.
+
+## Drawing your own, among the rows
+
+An app can draw something of its own in the terminal where it chooses,
+which scrolls and reflows with the rows as a program's image does: a
+widget under a command's output, a chart, a form. It places an image of
+its own there and draws over it. Name a range of image ids as the app's
+with `AppImages`; the view draws no image of those ids, and reports where
+each is placed:
+
+```go
+term, err := terminal.New(terminal.Options{Conn: conn, AppImages: struct{ First, Last uint32 }{1000, 1999}})
+
+// Place one over 40×6 cells at the cursor, which moves below it: a 1×1
+// image of the id, transmitted, then placed with the cells it takes.
+pixel := base64.StdEncoding.EncodeToString([]byte{0, 0, 0, 0})
+term.Feed([]byte(fmt.Sprintf("\x1b_Ga=t,f=32,s=1,v=1,i=1000,q=2;%s\x1b\\\x1b_Ga=p,i=1000,p=1,c=40,r=6,q=2\x1b\\", pixel)))
+
+// In the view function, after View: draw at each placement.
+terminal.View(c, term).Fill()
+for _, p := range term.AppPlacements() {
+	if p.Visible {
+		ui.Box(c.Key(p.Image)).Absolute().Left(p.Rect.X).Top(p.Rect.Y).Size(p.Rect.W, p.Rect.H).Children(func() { /* ... */ })
+	}
+}
+```
+
+`AppPlacements` gives each placement's image and placement ids, its first
+column and row (negative for a row scrolled off above the viewport), its
+cells, its rectangle in DIPs relative to the view, and whether any of it
+is in the viewport. A placement of the same image and placement ids
+replaces the one before, which changes its size; deleting the image
+(`a=d,d=I`) removes it. A `Mirror` carries them to the other terminal as it
+does images, where that terminal's view reports them.
 
 ## A server's terminal, shown elsewhere
 

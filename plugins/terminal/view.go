@@ -173,6 +173,9 @@ type view struct {
 	// virtual are the virtual placements, by their images' ids, which
 	// placeholder cells show.
 	virtual map[uint32][]virtualImage
+	// app are the placements of the app's own images (Options.AppImages),
+	// as of the last paint, for AppPlacements.
+	app []vt.Placement
 
 	keys    *vt.KeyEncoder
 	mouse   *vt.MouseEncoder
@@ -1119,6 +1122,61 @@ func (t *Terminal) HoveredLink() (link string, path bool, at ui.Rect) {
 		W: float32(h.x1-h.x0) * cw,
 		H: ch,
 	}
+}
+
+// CellRect returns the rectangle of the cell at column col and row row of
+// the screen, in DIPs relative to the view, as HoveredLink gives a
+// link's: rows count from the top of the viewport, so a row scrolled
+// off above is negative. False while no view shows the terminal. An app
+// draws something at a cell with it, read in the view function after
+// View.
+func (t *Terminal) CellRect(col, row int) (ui.Rect, bool) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	v := t.v
+	if v == nil || v.scale == 0 || v.cellW == 0 {
+		return ui.Rect{}, false
+	}
+	cw, ch := float32(v.cellW)/v.scale, float32(v.cellH)/v.scale
+	return ui.Rect{X: float32(v.ox)/v.scale + float32(col)*cw, Y: float32(v.oy)/v.scale + float32(row)*ch, W: cw, H: ch}, true
+}
+
+// AppPlacement is where the app placed one of its images
+// (Options.AppImages): the image's id and the placement's, and the cells
+// it takes, as a rectangle in DIPs relative to the view. Visible tells
+// that some of it is in the viewport; Row is its first row from the
+// viewport's top, negative above it, with its Cols and Rows.
+type AppPlacement struct {
+	Image, ID  uint32
+	Rect       ui.Rect
+	Visible    bool
+	Col, Row   int
+	Cols, Rows int
+}
+
+// AppPlacements returns the placements of the app's images, as of the
+// last paint: read it in the view function after View, and draw at each
+// Rect. None while no view shows the terminal.
+func (t *Terminal) AppPlacements() []AppPlacement {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	v := t.v
+	if v == nil || v.scale == 0 || v.cellW == 0 {
+		return nil
+	}
+	cw, ch := float32(v.cellW)/v.scale, float32(v.cellH)/v.scale
+	out := make([]AppPlacement, 0, len(v.app))
+	for _, pl := range v.app {
+		cols, rows := pl.ParamCols, pl.ParamRows
+		if pl.Cols > 0 {
+			cols, rows = pl.Cols, pl.Rows
+		}
+		out = append(out, AppPlacement{
+			Image: pl.ImageID, ID: pl.ID, Visible: pl.Visible, Col: pl.Col, Row: pl.Row, Cols: cols, Rows: rows,
+			Rect: ui.Rect{X: float32(v.ox)/v.scale + float32(pl.Col)*cw, Y: float32(v.oy)/v.scale + float32(pl.Row)*ch, W: float32(cols) * cw, H: float32(rows) * ch},
+		})
+	}
+	return out
 }
 
 // linkUnder is the link a click with mods at (x, y) opens, whether it is
