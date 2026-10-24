@@ -178,7 +178,8 @@ func (m *Mirror) frame(out *bytes.Buffer) {
 			if scrollback < m.scrollback && scrollback <= scrolled {
 				out.WriteString("\x1b[3J")
 			}
-			m.write(out, append(m.lines(top-scrolled, top), screen...))
+			images := m.scrollbackImages(top, top-scrolled, top)
+			m.write(out, append(m.lines(top-scrolled, top), screen...), top-scrolled, images)
 		default:
 			if scrollback < m.scrollback {
 				out.WriteString("\x1b[3J") // the scrollback was cleared
@@ -282,7 +283,8 @@ func (m *Mirror) restart(out *bytes.Buffer, screen []line, alt bool, top int) {
 		m.redraw(out, screen)
 		return
 	}
-	m.write(out, append(m.lines(0, top), screen...))
+	images := m.scrollbackImages(top, 0, top)
+	m.write(out, append(m.lines(0, top), screen...), 0, images)
 }
 
 // lines reads the rows of the scrollback from up to to, counted from its
@@ -328,8 +330,11 @@ func readLines(term *vt.Terminal, from, to int) []line {
 
 // write draws lines one after the other from the other screen's top, so
 // that those before the screen's, its last rows, go to its scrollback, as
-// they went to this one's.
-func (m *Mirror) write(out *bytes.Buffer, lines []line) {
+// they went to this one's. base is the first line's row from the top of
+// the scrollback: an image placed on a row of the scrollback is placed
+// there as the row passes through the other screen (scrollbackImages),
+// so that the other terminal keeps it as this one does.
+func (m *Mirror) write(out *bytes.Buffer, lines []line, base int, images map[int][]imageKey) {
 	rows := len(m.sent)
 	screen := len(lines) - rows
 	out.WriteString("\x1b[H")
@@ -342,6 +347,9 @@ func (m *Mirror) write(out *bytes.Buffer, lines []line) {
 		k := m.row(out, l, next, i > 0 && lines[i-1].wrap)
 		if i >= screen {
 			m.sent[i-screen] = k
+		}
+		if ks := images[base+i]; len(ks) > 0 {
+			m.placeOnRow(out, ks)
 		}
 		if !last && !l.wrap {
 			out.WriteString("\r\n")

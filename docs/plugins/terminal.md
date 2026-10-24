@@ -611,7 +611,11 @@ frame, due := m.Frame() // after output; due: a synchronized update holds it
 Frames draw rows where they are, and rows that scroll off pass through the
 window's screen in order, so that its scrollback is the server's; soft wraps
 stay soft. Each cell is drawn in its own style, so an empty cell stays empty
-after a colored one. A frame reads the terminal as a view does, taking its
+after a colored one. Images go with their rows: placed where they show,
+their pixels sent once, and an image on a row of the scrollback placed as
+its row passes through the window's screen, as when a Mirror starts over
+for a window that attaches, so that the window keeps it as the server
+does. A frame reads the terminal as a view does, taking its
 record of what changed: mirror a terminal no view shows, as a server's, with
 as many Mirrors as it has windows. A frame does not come while a program holds a synchronized update
 (mode 2026), up to a second: `Frame` then reports that one is due. The

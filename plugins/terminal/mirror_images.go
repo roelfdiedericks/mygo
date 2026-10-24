@@ -32,9 +32,11 @@ type mirroredImages struct {
 // images brings the other terminal's images of the screen that shows to
 // this one's (Kitty graphics): it sends the pixels of those placed, once
 // for each generation, places what shows that it has not, and deletes
-// what went. A placement whose top scrolled off before a frame saw it, as
-// when a Mirror starts over, does not show there. top is the screen's
-// first row from the top of the scrollback.
+// what went. A placement on a row of the scrollback is placed as the row
+// goes through the other screen (scrollbackImages, write). Virtual
+// placements go as they are, for the cells of Unicode placeholders, which
+// frames draw as text. top is the screen's first row from the top of the
+// scrollback.
 func (m *Mirror) images(out *bytes.Buffer, term *vt.Terminal, alt bool, top, rows int) {
 	st := &m.imgs[0]
 	if alt {
@@ -119,6 +121,72 @@ func (m *Mirror) images(out *bytes.Buffer, term *vt.Terminal, alt bool, top, row
 			k.row-top+1, k.col+1, k.img, m.placement, k.xoff, k.yoff, k.srcX, k.srcY, k.srcW, k.srcH, k.cols, k.rows, k.z)
 		st.placed[k] = m.placement
 	}
+}
+
+// scrollbackImages returns the placements of images on rows of the
+// scrollback from from up to to, by row, that the other terminal lacks:
+// those a frame never saw on the screen, as when a Mirror starts over,
+// or when rows went to the scrollback faster than frames came. The
+// viewport is at the bottom, so a placement's row is top + its row from
+// the viewport's top.
+func (m *Mirror) scrollbackImages(top, from, to int) map[int][]imageKey {
+	st := &m.imgs[0]
+	if st.gens == nil {
+		st.gens, st.placed = map[uint32]uint64{}, map[imageKey]uint32{}
+	}
+	var out map[int][]imageKey
+	m.t.term.Placements(func(pl vt.Placement) {
+		row := top + pl.Row
+		if pl.Virtual || row < from || row >= to {
+			return
+		}
+		k := imageKey{
+			img: pl.ImageID, id: pl.ID, row: row, col: pl.Col, xoff: pl.XOffset, yoff: pl.YOffset,
+			cols: pl.ParamCols, rows: pl.ParamRows,
+			srcX: pl.ParamSrcX, srcY: pl.ParamSrcY, srcW: pl.ParamSrcW, srcH: pl.ParamSrcH, gr: max(pl.Rows, 1), z: pl.Z,
+		}
+		if _, ok := st.placed[k]; ok {
+			return
+		}
+		if out == nil {
+			out = map[int][]imageKey{}
+		}
+		out[row] = append(out[row], k)
+	})
+	return out
+}
+
+// placeOnRow places images on the row the cursor is on, as write drew
+// it: the cursor goes to each one's column and comes back.
+func (m *Mirror) placeOnRow(out *bytes.Buffer, ks []imageKey) {
+	st := &m.imgs[0]
+	for _, k := range ks {
+		if !m.sendPixels(out, m.t.term, st, k.img) {
+			continue
+		}
+		m.placement++
+		fmt.Fprintf(out, "\x1b7\x1b[%dG\x1b_Ga=p,i=%d,p=%d,X=%d,Y=%d,x=%d,y=%d,w=%d,h=%d,c=%d,r=%d,z=%d,C=1,q=2\x1b\\\x1b8",
+			k.col+1, k.img, m.placement, k.xoff, k.yoff, k.srcX, k.srcY, k.srcW, k.srcH, k.cols, k.rows, k.z)
+		st.placed[k] = m.placement
+	}
+}
+
+// sendPixels sends the pixels of an image the other terminal does not
+// have as of its generation, and reports whether it has them.
+func (m *Mirror) sendPixels(out *bytes.Buffer, term *vt.Terminal, st *mirroredImages, id uint32) bool {
+	gen := term.ImageGeneration(id)
+	if gen == 0 {
+		return false
+	}
+	if st.gens[id] != gen {
+		img, ok := term.Image(id)
+		if !ok {
+			return false
+		}
+		sendImage(out, img)
+		st.gens[id] = gen
+	}
+	return true
 }
 
 // sendImage writes the sequences that transmit an image's pixels, as

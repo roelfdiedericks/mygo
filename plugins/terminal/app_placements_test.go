@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/egoist/mygo/plugins/terminal/internal/vt"
 	"github.com/egoist/mygo/ui"
 )
 
@@ -98,6 +99,60 @@ func TestMirrorAppPlacements(t *testing.T) {
 	ps := dst.AppPlacements()
 	if len(ps) != 1 || ps[0].Image != 1001 || ps[0].Row != 1 || ps[0].Cols != 4 || ps[0].Rows != 3 {
 		t.Errorf("mirrored placements: %+v", ps)
+	}
+}
+
+// A placement whose row went to the scrollback is placed in the other
+// terminal as its row passes through the screen: by a Mirror that starts
+// over, and by one whose frames missed the rows going by.
+func TestMirrorScrollbackPlacements(t *testing.T) {
+	loadLib(t)
+	src, err := New(Options{Conn: newPipe()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer src.Close()
+	src.ResizePixels(40, 10, 8, 16)
+	src.Feed([]byte("one\r\n" + appAnchor(1002, 40, 3) + "\r\n\r\n\r\n"))
+	// Twelve more rows: the anchor's row 1 is now 3 rows into the
+	// scrollback.
+	src.Feed([]byte(strings.Repeat("x\r\n", 12)))
+	mirrorTo := func(m *Mirror) *Terminal {
+		dst, _ := New(Options{Conn: newPipe(), AppImages: struct{ First, Last uint32 }{1000, 1999}})
+		dst.ResizePixels(40, 10, 8, 16)
+		f, _ := m.Frame()
+		dst.Feed(f)
+		return dst
+	}
+	placements := func(dst *Terminal) string {
+		dst.mu.Lock()
+		defer dst.mu.Unlock()
+		var out []string
+		dst.term.Placements(func(p vt.Placement) {
+			out = append(out, fmt.Sprintf("img=%d row=%d col=%d cols=%d rows=%d", p.ImageID, p.Row, p.Col, p.ParamCols, p.ParamRows))
+		})
+		return strings.Join(out, "; ")
+	}
+	// Starting over: the first frame draws the scrollback through the
+	// screen, the anchor on its row.
+	m, _ := src.NewMirror()
+	defer m.Close()
+	dst := mirrorTo(m)
+	defer dst.Close()
+	if got, want := placements(dst), placements(src); got != want || !strings.Contains(got, "img=1002 row=-") {
+		t.Errorf("after a restart: %q, the source has %q", got, want)
+	}
+	// Frames missed the rows going by: a placement made, then scrolled
+	// off between two frames, is placed as its row passes.
+	m2, _ := src.NewMirror()
+	defer m2.Close()
+	dst2 := mirrorTo(m2)
+	defer dst2.Close()
+	src.Feed([]byte(appAnchor(1003, 40, 2) + "\r\n\r\n" + strings.Repeat("y\r\n", 11)))
+	f, _ := m2.Frame()
+	dst2.Feed(f)
+	if got, want := placements(dst2), placements(src); got != want || !strings.Contains(got, "img=1003 row=-") {
+		t.Errorf("after a fast scroll: %q, the source has %q", got, want)
 	}
 }
 
