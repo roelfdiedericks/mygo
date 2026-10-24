@@ -1179,6 +1179,23 @@ func (t *Terminal) AppPlacements() []AppPlacement {
 	return out
 }
 
+// Scroll takes a scroll event over something the app draws over the
+// view, at a placement of its own say, as the view takes one over its
+// cells: the scrollback scrolls, or the program gets the wheel, or the
+// zoom modifier zooms. The event's X and Y are relative to the view. It
+// reports whether the event was taken, which it is not while no view
+// shows the terminal: an element's HandleInput passes it the scroll
+// events it gets.
+func (t *Terminal) Scroll(ev ui.InputEvent) bool {
+	t.mu.Lock()
+	v := t.v
+	t.mu.Unlock()
+	if v == nil || ev.Kind != ui.InputScroll {
+		return false
+	}
+	return v.scroll(ev)
+}
+
 // linkUnder is the link a click with mods at (x, y) opens, whether it is
 // a file path, and its cells: none without Command, or while the primary
 // button selects or the program has a press; t.mu is held.

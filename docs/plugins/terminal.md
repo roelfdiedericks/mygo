@@ -570,6 +570,22 @@ replaces the one before, which changes its size; deleting the image
 (`a=d,d=I`) removes it. A `Mirror` carries them to the other terminal as it
 does images, where that terminal's view reports them.
 
+What the app draws over the view takes the pointer from it: the wheel
+over it would scroll nothing. The element hands its scroll events to
+the terminal with `Scroll`, which scrolls the scrollback, or gives the
+program the wheel, as the view does; the event's `X` and `Y` are
+relative to the view, so add the placement's `Rect` to the element's:
+
+```go
+box.HandleInput(func(ev ui.InputEvent) bool {
+	if ev.Kind != ui.InputScroll {
+		return false
+	}
+	ev.X, ev.Y = ev.X+p.Rect.X, ev.Y+p.Rect.Y
+	return term.Scroll(ev)
+})
+```
+
 ## A server's terminal, shown elsewhere
 
 A server that keeps sessions running, as a multiplexer does, keeps each
