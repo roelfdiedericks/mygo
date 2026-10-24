@@ -100,3 +100,43 @@ func TestMirrorAppPlacements(t *testing.T) {
 		t.Errorf("mirrored placements: %+v", ps)
 	}
 }
+
+// An element the app draws over the view hands the wheel to the
+// terminal with Scroll, which scrolls the scrollback as the view does.
+func TestScrollFromAppElement(t *testing.T) {
+	loadLib(t)
+	term, err := New(Options{Conn: newPipe(), Theme: LightTheme()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer term.Close()
+	tt := ui.NewTester(func(c *ui.Context) {
+		ui.Box(c).Fill().Children(func() {
+			View(c, term).Fill()
+			ui.Box(c).Absolute().Fill().Background(ui.RGB(1, 2, 3)).HandleInput(func(ev ui.InputEvent) bool {
+				return term.Scroll(ev)
+			})
+		})
+	}, 400, 200)
+	tt.Frame()
+	offset := func() uint64 {
+		term.mu.Lock()
+		defer term.mu.Unlock()
+		return term.term.Scrollbar().Offset
+	}
+	_, rows := term.Size()
+	term.Feed([]byte(strings.Repeat("line\r\n", rows+20)))
+	tt.Frame()
+	before := offset()
+	if before == 0 {
+		t.Fatal("no scrollback to scroll")
+	}
+	tt.Wheel(100, 100, 0, -40) // a notch up: three rows
+	tt.Frame()
+	if got := offset(); got != before-3 {
+		t.Errorf("offset after a notch up over the app's element: %d, was %d", got, before)
+	}
+	if term.Scroll(ui.InputEvent{Kind: ui.InputPointerDown}) {
+		t.Error("a pointer event was taken")
+	}
+}
