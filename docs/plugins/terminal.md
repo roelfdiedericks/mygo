@@ -506,8 +506,9 @@ The terminal's methods are safe from any goroutine:
   text, which such a program reads as `text/plain`.
 - `Feed` shows bytes as if the program wrote them, text and escape
   sequences.
-- `Title`, `Dir` (the directory the shell reported), `Size` (in cells) and
-  `Text` (the screen and its scrollback) read the terminal.
+- `Title`, `Dir` (the directory the shell reported), `Size` (in cells),
+  `Cursor` (the cell the cursor is on) and `Text` (the screen and its
+  scrollback) read the terminal.
 - `HoveredLink` returns the link Command (Control elsewhere) is held over
   in the view, as `OpenLink` takes it, whether it is a file path, and the
   rectangle of its cells relative to the view: read it after `View` to
@@ -568,7 +569,8 @@ cells, its rectangle in DIPs relative to the view, and whether any of it
 is in the viewport. A placement of the same image and placement ids
 replaces the one before, which changes its size; deleting the image
 (`a=d,d=I`) removes it. A `Mirror` carries them to the other terminal as it
-does images, where that terminal's view reports them.
+does images, where that terminal's view reports them. A terminal no view
+shows, as a server's, reports them too, in cells, with an empty rectangle.
 
 What the app draws over the view takes the pointer from it: the wheel
 over it would scroll nothing. The element hands its scroll events to

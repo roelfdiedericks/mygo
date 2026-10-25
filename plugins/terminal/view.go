@@ -1156,27 +1156,56 @@ type AppPlacement struct {
 
 // AppPlacements returns the placements of the app's images, as of the
 // last paint: read it in the view function after View, and draw at each
-// Rect. None while no view shows the terminal.
+// Rect. A terminal no view shows, as a server's, reports where they are
+// now, in cells, with an empty Rect.
 func (t *Terminal) AppPlacements() []AppPlacement {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	v := t.v
-	if v == nil || v.scale == 0 || v.cellW == 0 {
+	if v == nil {
+		var out []AppPlacement
+		if r := t.opts.AppImages; r.Last > 0 && t.term != nil {
+			t.term.Placements(func(pl vt.Placement) {
+				if !pl.Virtual && pl.ImageID >= r.First && pl.ImageID <= r.Last {
+					out = append(out, appPlacement(pl, 0, 0, 0, 0))
+				}
+			})
+		}
+		return out
+	}
+	if v.scale == 0 || v.cellW == 0 {
 		return nil
 	}
 	cw, ch := float32(v.cellW)/v.scale, float32(v.cellH)/v.scale
 	out := make([]AppPlacement, 0, len(v.app))
 	for _, pl := range v.app {
-		cols, rows := pl.ParamCols, pl.ParamRows
-		if pl.Cols > 0 {
-			cols, rows = pl.Cols, pl.Rows
-		}
-		out = append(out, AppPlacement{
-			Image: pl.ImageID, ID: pl.ID, Visible: pl.Visible, Col: pl.Col, Row: pl.Row, Cols: cols, Rows: rows,
-			Rect: ui.Rect{X: float32(v.ox)/v.scale + float32(pl.Col)*cw, Y: float32(v.oy)/v.scale + float32(pl.Row)*ch, W: float32(cols) * cw, H: float32(rows) * ch},
-		})
+		out = append(out, appPlacement(pl, float32(v.ox)/v.scale, float32(v.oy)/v.scale, cw, ch))
 	}
 	return out
+}
+
+// appPlacement is pl as AppPlacements reports it, its rectangle from
+// the view's origin ox, oy and its cells' size cw, ch.
+func appPlacement(pl vt.Placement, ox, oy, cw, ch float32) AppPlacement {
+	cols, rows := pl.ParamCols, pl.ParamRows
+	if pl.Cols > 0 {
+		cols, rows = pl.Cols, pl.Rows
+	}
+	return AppPlacement{
+		Image: pl.ImageID, ID: pl.ID, Visible: pl.Visible, Col: pl.Col, Row: pl.Row, Cols: cols, Rows: rows,
+		Rect: ui.Rect{X: ox + float32(pl.Col)*cw, Y: oy + float32(pl.Row)*ch, W: float32(cols) * cw, H: float32(rows) * ch},
+	}
+}
+
+// Cursor returns the cell the cursor is on, its column and its row from
+// the top of the screen.
+func (t *Terminal) Cursor() (col, row int) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.term == nil {
+		return 0, 0
+	}
+	return t.term.Cursor()
 }
 
 // Scroll takes a scroll event over something the app draws over the
