@@ -156,6 +156,27 @@ func TestMirrorScrollbackPlacements(t *testing.T) {
 	}
 }
 
+// A terminal no view shows reports its app's placements in cells, and
+// where the cursor is, as a server reads them.
+func TestAppPlacementsHeadless(t *testing.T) {
+	loadLib(t)
+	term, err := New(Options{Conn: newPipe(), AppImages: struct{ First, Last uint32 }{1000, 1999}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer term.Close()
+	term.ResizePixels(40, 10, 8, 16)
+	term.Feed([]byte("one\r\n" + appAnchor(1000, 1, 1) + "\r\n\r\n\r\n" + appAnchor(7, 1, 1)))
+	ps := term.AppPlacements()
+	if len(ps) != 1 || ps[0].Image != 1000 || ps[0].Row != 1 || ps[0].Col != 0 || ps[0].Rect != (ui.Rect{}) {
+		t.Errorf("placements: %+v", ps)
+	}
+	// The ordinary image, placed without C=1, moved the cursor past it.
+	if col, row := term.Cursor(); col != 1 || row != 4 {
+		t.Errorf("cursor at %d,%d, want 1,4", col, row)
+	}
+}
+
 // An element the app draws over the view hands the wheel to the
 // terminal with Scroll, which scrolls the scrollback as the view does.
 func TestScrollFromAppElement(t *testing.T) {
