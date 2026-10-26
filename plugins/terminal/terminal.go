@@ -126,8 +126,13 @@ type Options struct {
 	Cursor  CursorStyle
 	NoBlink bool
 	// Scrollback is about how many bytes of output the terminal keeps above
-	// the screen: 10 MB when zero, none when negative.
-	Scrollback int
+	// the screen: 10 MB when zero, none when negative. ScrollbackLines,
+	// when above zero, takes its place: about how many lines the terminal
+	// keeps above the screen, however wide it is (a line of a wider
+	// terminal takes more bytes), give or take the lines of a page of the
+	// library's, which it drops whole.
+	Scrollback      int
+	ScrollbackLines int
 	// OptionAsAlt makes Option on macOS the Alt key of programs (Meta),
 	// rather than the key that types accented letters and symbols.
 	OptionAsAlt bool
@@ -610,6 +615,8 @@ func New(opts Options) (*Terminal, error) {
 	// emoji with modifiers and joined emoji take two.
 	t.term.SetModeDefault(vt.ModeGraphemes, true)
 	switch {
+	case opts.ScrollbackLines > 0:
+		t.term.SetScrollbackLines(opts.ScrollbackLines)
 	case opts.Scrollback < 0:
 		t.term.SetScrollback(0)
 	case opts.Scrollback > 0:

@@ -1225,6 +1225,35 @@ func (t *Terminal) Scroll(ev ui.InputEvent) bool {
 	return v.scroll(ev)
 }
 
+// ScrollRows scrolls the scrollback by n rows, up when negative, as
+// Shift+Page Up does by a page, and ScrollToTop and ScrollToBottom to
+// its ends, for an app that scrolls the terminal from code, as for keys
+// of its own; unlike Scroll, a program taking the mouse does not get
+// them as the wheel. They report whether they scrolled: a full-screen
+// program's screen has no scrollback.
+func (t *Terminal) ScrollRows(n int) bool {
+	return t.scrollBack(func(term *vt.Terminal) { term.ScrollBy(n) })
+}
+
+func (t *Terminal) ScrollToTop() bool { return t.scrollBack((*vt.Terminal).ScrollToTop) }
+
+func (t *Terminal) ScrollToBottom() bool { return t.scrollBack((*vt.Terminal).ScrollToBottom) }
+
+// scrollBack scrolls the scrollback with fn, but for a full-screen
+// program's screen, and reports whether it did.
+func (t *Terminal) scrollBack(fn func(*vt.Terminal)) bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.term == nil || t.term.AltScreen() {
+		return false
+	}
+	fn(t.term)
+	if v := t.v; v != nil {
+		v.services.Invalidate()
+	}
+	return true
+}
+
 // linkUnder is the link a click with mods at (x, y) opens, whether it is
 // a file path, and its cells: none without Command, or while the primary
 // button selects or the program has a press; t.mu is held.

@@ -154,7 +154,12 @@ term, err := terminal.New(terminal.Options{
   (OSC 4, 10, 11, 12).
 - `Cursor` and `NoBlink` set the cursor, which programs may change.
 - `Scrollback` is about how many bytes of output to keep above the
-  screen: 10 MB by default, none when negative.
+  screen: 10 MB by default, none when negative. `ScrollbackLines`, when
+  set, takes its place: about how many lines to keep, however wide the
+  terminal is (a line of a wide terminal takes more bytes). The terminal
+  drops whole pages of its oldest lines, so it keeps between that number
+  less a page's lines (a few hundred at 80 columns, fewer when wider) and
+  that number.
 - `MinimumContrast` is the least contrast text has with its background,
   as Ghostty's `minimum-contrast`: a WCAG ratio from 1 (none, the
   default) to 21. Text with less, as a program's light gray on a light
@@ -568,7 +573,8 @@ column and row (negative for a row scrolled off above the viewport), its
 cells, its rectangle in DIPs relative to the view, and whether any of it
 is in the viewport. A placement of the same image and placement ids
 replaces the one before, which changes its size; deleting the image
-(`a=d,d=I`) removes it. A `Mirror` carries them to the other terminal as it
+(`a=d,d=I`) removes it, and so does its row leaving the scrollback, as
+the oldest lines go. A `Mirror` carries them to the other terminal as it
 does images, where that terminal's view reports them. A terminal no view
 shows, as a server's, reports them too, in cells, with an empty rectangle.
 
@@ -587,6 +593,10 @@ box.HandleInput(func(ev ui.InputEvent) bool {
 	return term.Scroll(ev)
 })
 ```
+
+`ScrollRows`, `ScrollToTop` and `ScrollToBottom` scroll the scrollback
+from code, as keys of the app's would, without the program getting them
+as the wheel.
 
 ## A server's terminal, shown elsewhere
 

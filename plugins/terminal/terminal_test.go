@@ -234,6 +234,29 @@ func TestScrollback(t *testing.T) {
 	}
 }
 
+// ScrollbackLines keeps about that many lines however wide the terminal
+// is: whole pages of the oldest go, so it keeps between the number less a
+// page's lines and the number. 10 MB, the default in bytes, would keep
+// about 2,900 rows at 400 columns.
+func TestScrollbackLines(t *testing.T) {
+	loadLib(t)
+	for _, cols := range []int{80, 400} {
+		term, err := New(Options{Conn: newPipe(), ScrollbackLines: 5000})
+		if err != nil {
+			t.Fatal(err)
+		}
+		term.ResizePixels(cols, 24, 8, 16)
+		term.Feed([]byte(strings.Repeat("x\r\n", 20000)))
+		term.mu.Lock()
+		n := term.term.ScrollbackRows()
+		term.mu.Unlock()
+		term.Close()
+		if n < 4000 || n > 5000 {
+			t.Errorf("%d columns: %d lines kept, want about 5000", cols, n)
+		}
+	}
+}
+
 // TestScrollbarDrag: the scroll bar shows as the viewport moves, and over
 // its strip, where the pointer is the arrow rather than the I-beam, and
 // fades out a while after. It drags the scrollback along: by the thumb, or
