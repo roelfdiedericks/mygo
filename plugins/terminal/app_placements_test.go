@@ -177,6 +177,59 @@ func TestAppPlacementsHeadless(t *testing.T) {
 	}
 }
 
+// A placement whose row left the scrollback with the oldest lines is
+// gone: the library keeps it, at no position, until a placement is next
+// added, and it is not reported at the top of the screen in between.
+func TestAppPlacementsPruned(t *testing.T) {
+	loadLib(t)
+	term, err := New(Options{Conn: newPipe(), ScrollbackLines: 100, AppImages: struct{ First, Last uint32 }{1000, 1999}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer term.Close()
+	term.ResizePixels(40, 10, 8, 16)
+	term.Feed([]byte(appAnchor(1000, 1, 1) + "\r\n" + strings.Repeat("line\r\n", 50)))
+	if ps := term.AppPlacements(); len(ps) != 1 || ps[0].Row >= 0 {
+		t.Fatalf("in the scrollback: %+v", ps)
+	}
+	term.Feed([]byte(strings.Repeat("line\r\n", 5000)))
+	if ps := term.AppPlacements(); len(ps) != 0 {
+		t.Errorf("after its row left the scrollback: %+v", ps)
+	}
+}
+
+// ScrollRows, ScrollToTop and ScrollToBottom scroll the scrollback from
+// code; a full-screen program's screen has none.
+func TestScrollRows(t *testing.T) {
+	loadLib(t)
+	term, err := New(Options{Conn: newPipe()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer term.Close()
+	term.ResizePixels(40, 10, 8, 16)
+	term.Feed([]byte(strings.Repeat("line\r\n", 100)))
+	offset := func() uint64 {
+		term.mu.Lock()
+		defer term.mu.Unlock()
+		return term.term.Scrollbar().Offset
+	}
+	bottom := offset()
+	if !term.ScrollRows(-5) || offset() != bottom-5 {
+		t.Errorf("5 rows up: offset %d, bottom %d", offset(), bottom)
+	}
+	if !term.ScrollToTop() || offset() != 0 {
+		t.Errorf("to the top: offset %d", offset())
+	}
+	if !term.ScrollToBottom() || offset() != bottom {
+		t.Errorf("to the bottom: offset %d, want %d", offset(), bottom)
+	}
+	term.Feed([]byte("\x1b[?1049h"))
+	if term.ScrollRows(-5) || term.ScrollToTop() {
+		t.Error("scrolled a full-screen program's screen")
+	}
+}
+
 // An element the app draws over the view hands the wheel to the
 // terminal with Scroll, which scrolls the scrollback as the view does.
 func TestScrollFromAppElement(t *testing.T) {
