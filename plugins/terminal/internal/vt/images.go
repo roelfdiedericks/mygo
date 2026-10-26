@@ -111,7 +111,10 @@ func (t *Terminal) graphics() uintptr {
 	return g
 }
 
-// Placements calls fn with each placement of the screen that shows.
+// Placements calls fn with each placement of the screen that shows. A
+// placement whose rows left the scrollback is not one: the library keeps
+// it until a placement is next added, at no position (row and column 0,
+// not visible, which a placed one at that cell always is).
 func (t *Terminal) Placements(fn func(Placement)) {
 	g := t.graphics()
 	if g == 0 {
@@ -147,6 +150,9 @@ func (t *Terminal) Placements(fn func(Placement)) {
 				p.Width, p.Height = int(ri.pixelWidth), int(ri.pixelHeight)
 				p.Cols, p.Rows = int(ri.gridCols), int(ri.gridRows)
 				p.SrcX, p.SrcY, p.SrcW, p.SrcH = int(ri.sourceX), int(ri.sourceY), int(ri.sourceW), int(ri.sourceH)
+				if !p.Virtual && !p.Visible && p.Row == 0 && p.Col == 0 {
+					continue
+				}
 			}
 		}
 		fn(p)

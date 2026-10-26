@@ -134,6 +134,7 @@ const (
 	optClipboardWrite      = 26
 	optClipboardRead       = 38
 	optScrollbackMaxBytes  = 27
+	optScrollbackMaxLines  = 28
 	optDesktopNotification = 29
 	optProgressReport      = 30
 	optModeDefault         = 33
@@ -276,6 +277,15 @@ func (t *Terminal) SetColors(fg, bg RGB, cursor *RGB, palette *[256]RGB) {
 func (t *Terminal) SetScrollback(n int) {
 	v := uintptr(max(n, 0))
 	t.set(optScrollbackMaxBytes, unsafe.Pointer(&v))
+}
+
+// SetScrollbackLines limits the scrollback to about n lines, at any
+// width, and lifts the limit in bytes: the library drops whole pages of
+// the oldest lines, so it keeps between n less a page's lines and n.
+func (t *Terminal) SetScrollbackLines(n int) {
+	v := uintptr(max(n, 0))
+	t.set(optScrollbackMaxLines, unsafe.Pointer(&v))
+	t.set(optScrollbackMaxBytes, nil)
 }
 
 // SetTerminfoName sets the name of the terminfo entry the terminal reports
