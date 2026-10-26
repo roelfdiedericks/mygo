@@ -828,18 +828,18 @@ func (v *view) drawScrollbar(p *ui.Painter, r ui.Rect) {
 	if !v.viewHover && !v.barHeld && !v.barAlways && !up {
 		return
 	}
-	y, h := thumb(sb, r.H)
+	y, h := thumb(sb, r.H, v.barMin)
 	w := v.barW
 	p.Fill(ui.Rect{X: r.X + r.W - 3 - w, Y: r.Y + y, W: w, H: h}, v.barColor, w/2)
 }
 
 // thumb returns the top of the scroll bar's thumb along a track h DIPs
 // high, and its length, as a scroll container's: 2 DIPs in from the
-// track's ends, 24 long at least; the scrollback is longer than the
+// track's ends, minLen long at least; the scrollback is longer than the
 // viewport.
-func thumb(sb vt.Scrollbar, h float32) (y, th float32) {
+func thumb(sb vt.Scrollbar, h, minLen float32) (y, th float32) {
 	inner := h - 4
-	th = min(max(inner*float32(sb.Len)/float32(sb.Total), 24), inner)
+	th = min(max(inner*float32(sb.Len)/float32(sb.Total), minLen), inner)
 	return 2 + (inner-th)*float32(sb.Offset)/float32(sb.Total-sb.Len), th
 }
 

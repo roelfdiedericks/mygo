@@ -29,6 +29,15 @@ func barWidth(t *ui.Theme) float32 {
 	return t.ScrollbarWidth + 4
 }
 
+// barMinLength is how long the scroll bars' thumbs are at least, by the
+// theme's ScrollbarMinLength (48 when 0), as scroll containers' are.
+func barMinLength(t *ui.Theme) float32 {
+	if t == nil || t.ScrollbarMinLength <= 0 {
+		return 48
+	}
+	return t.ScrollbarMinLength
+}
+
 // input takes the editor's input as it comes.
 func (ed *editor) input(ev ui.InputEvent) bool {
 	// The key after the first of a chord is the chord's, as VS Code's
@@ -503,7 +512,7 @@ func (ed *editor) thumb(horizontal bool) (float32, float32) {
 	if horizontal {
 		track := ed.r.W - ed.textX - ed.barW
 		content := ed.view.maxLine + ed.view.charWidth*4
-		size := max(24, track*track/max(content, track))
+		size := min(max(ed.barMin, track*track/max(content, track)), track)
 		f := float32(0)
 		if m := ed.maxScrollX(); m > 0 {
 			f = ed.scrollX / m
@@ -512,7 +521,7 @@ func (ed *editor) thumb(horizontal bool) (float32, float32) {
 	}
 	track := ed.viewH
 	content := float32(ed.scrollMax()) + ed.viewH
-	size := max(24, track*track/max(content, track))
+	size := min(max(ed.barMin, track*track/max(content, track)), track)
 	f := float32(0)
 	if m := ed.scrollMax(); m > 0 {
 		f = float32(ed.scrollY / m)

@@ -505,7 +505,7 @@ func TestScrollBoth(t *testing.T) {
 	// Drag the horizontal thumb to the end.
 	tt.Move(50, 50)
 	st := sc.st
-	g := scrollBars(Rect{st.x, st.y, st.w, st.h}, st.barInset, float32(st.contentW), float32(st.contentH), float32(st.scrollX), float32(st.scrollY), st.flags, 6, false)
+	g := scrollBars(Rect{st.x, st.y, st.w, st.h}, st.barInset, float32(st.contentW), float32(st.contentH), float32(st.scrollX), float32(st.scrollY), st.flags, barLook{width: 6}, false)
 	if !g.horizontal || !g.vertical {
 		t.Fatalf("scroll bars %+v", g)
 	}
@@ -523,19 +523,19 @@ func TestScrollbarInsets(t *testing.T) {
 	var content Rect
 	tt := coreNewTester(func(c *context) {
 		sc = coreScroll(c).Size(100, 200).ScrollbarInsets(50, 4, 10).Children(func() {
-			coreBox(c).Size(100, 800).Draw(func(p *Painter, r Rect) { content = r })
+			coreBox(c).Size(100, 400).Draw(func(p *Painter, r Rect) { content = r })
 		})
 	}, 200, 200)
 	tt.Move(50, 100)
 	st := sc.st
-	g := scrollBars(Rect{st.x, st.y, st.w, st.h}, st.barInset, float32(st.contentW), float32(st.contentH), float32(st.scrollX), float32(st.scrollY), st.flags, 6, false)
+	g := scrollBars(Rect{st.x, st.y, st.w, st.h}, st.barInset, float32(st.contentW), float32(st.contentH), float32(st.scrollX), float32(st.scrollY), st.flags, barLook{width: 6}, false)
 	// The track runs from 50 below the top to 10 above the bottom, 4 in
-	// from the right; the thumb shows a quarter of it, the content's
-	// share in view.
+	// from the right; the thumb shows half of it, the content's share in
+	// view.
 	if g.vTrack.Y != 50 || g.vTrack.Y+g.vTrack.H != 190 || g.vTrack.X+g.vTrack.W != 96 {
 		t.Fatalf("the track is %+v", g.vTrack)
 	}
-	if g.v.Y != 52 || g.v.H != (140-4)/4 {
+	if g.v.Y != 52 || g.v.H != (140-4)/2 {
 		t.Errorf("the thumb is %+v", g.v)
 	}
 	// A press above the track, under the inset, does not page.
@@ -549,8 +549,22 @@ func TestScrollbarInsets(t *testing.T) {
 	tt.Press(x, y)
 	tt.Move(x, y+200)
 	tt.Release(x, y+200)
-	if content.Y != -600 {
+	if content.Y != -200 {
 		t.Errorf("dragging the thumb scrolled to %v", content.Y)
+	}
+}
+
+// A thumb is as long as the view is of the content, but the theme's
+// ScrollbarMinLength at least (48 by default), within its track.
+func TestScrollbarMinLength(t *testing.T) {
+	box, flags := Rect{0, 0, 100, 200}, uint32(flagScrollY)
+	for _, c := range []struct {
+		min, content, want float32
+	}{{0, 400, 98}, {0, 20000, 48}, {80, 20000, 80}, {300, 20000, 196}} {
+		g := scrollBars(box, [4]float32{}, 100, c.content, 0, 0, flags, barLook{6, c.min}, false)
+		if g.v.H != c.want {
+			t.Errorf("min %v, content %v: thumb %v long, want %v", c.min, c.content, g.v.H, c.want)
+		}
 	}
 }
 
@@ -570,7 +584,7 @@ func TestScrollbarCursor(t *testing.T) {
 		t.Fatalf("the pointer is %v over the text", tt.Cursor())
 	}
 	st := sc.st
-	g := scrollBars(Rect{st.x, st.y, st.w, st.h}, st.barInset, float32(st.contentW), float32(st.contentH), float32(st.scrollX), float32(st.scrollY), st.flags, 6, false)
+	g := scrollBars(Rect{st.x, st.y, st.w, st.h}, st.barInset, float32(st.contentW), float32(st.contentH), float32(st.scrollX), float32(st.scrollY), st.flags, barLook{width: 6}, false)
 	// Over the track, under the thumb and over it, the bar's arrow, not
 	// the text's I-beam.
 	if tt.Move(g.vTrack.X+1, g.vTrack.Y+g.vTrack.H-5); tt.Cursor() != CursorDefault {

@@ -109,7 +109,7 @@ The terminal does what terminal apps do:
   Shift+Page Up and Shift+Page Down. Full-screen programs get the wheel as
   arrow keys, or as mouse reports when they take the mouse. Typing scrolls
   back to the bottom. The scroll bar is the window's scroll containers',
-  as the theme draws them (`Scrollbar`, `ScrollbarWidth`): it shows while
+  as the theme draws them (`Scrollbar`, `ScrollbarWidth`, `ScrollbarMinLength`): it shows while
   the pointer is over the view, while the view is up from the bottom, and
   always with the theme's `ScrollbarsAlways`; its thumb drags, and a
   press on its track scrolls a page.

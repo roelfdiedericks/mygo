@@ -198,12 +198,13 @@ type view struct {
 	// barGrab DIPs below the thumb's top; overBar that the pointer is over
 	// the bar, as of its last move, and barHover as of the last build;
 	// viewHover that the pointer was over the view's box, under what the
-	// app draws over it too. barW, barColor and
-	// barAlways are the window theme's ScrollbarWidth (6 when it says
-	// none), Scrollbar and ScrollbarsAlways, as the last build read them.
+	// app draws over it too. barW, barMin, barColor and barAlways are the
+	// window theme's ScrollbarWidth (6 when it says none),
+	// ScrollbarMinLength (48 when it says none), Scrollbar and
+	// ScrollbarsAlways, as the last build read them.
 	barHeld, overBar, barHover, viewHover bool
 	barGrab                               float32
-	barW                                  float32
+	barW, barMin                          float32
 	barColor                              ui.Color
 	barAlways                             bool
 	// hover is the link Command is held over, which a click opens and
@@ -280,9 +281,12 @@ func (v *view) build(c *ui.Context, e ui.Element) {
 		theme = defaultTheme(dark)
 	}
 	v.theme = theme
-	v.barW, v.barColor, v.barAlways = th.ScrollbarWidth, th.Scrollbar, th.ScrollbarsAlways
+	v.barW, v.barMin, v.barColor, v.barAlways = th.ScrollbarWidth, th.ScrollbarMinLength, th.Scrollbar, th.ScrollbarsAlways
 	if v.barW <= 0 {
 		v.barW = 6
+	}
+	if v.barMin <= 0 {
+		v.barMin = 48
 	}
 	// Over the view's box, whatever the app draws over it (AppPlacements):
 	// the scroll bar shows as over the text.
@@ -1307,7 +1311,7 @@ func (v *view) scrollbarEvent(ev ui.InputEvent) bool {
 		v.dragScrollbar(ev.Y)
 	case v.overBar && ev.Kind == ui.InputPointerDown && ev.Button == 0:
 		term := v.t.term
-		y, h := thumb(term.Scrollbar(), v.size[1])
+		y, h := thumb(term.Scrollbar(), v.size[1], v.barMin)
 		_, rows := term.Size()
 		page := max(rows*9/10, 1)
 		switch {
@@ -1333,7 +1337,7 @@ func (v *view) dragScrollbar(y float32) {
 	if sb.Total <= sb.Len {
 		return
 	}
-	_, h := thumb(sb, v.size[1])
+	_, h := thumb(sb, v.size[1], v.barMin)
 	travel := v.size[1] - 4 - h
 	if travel <= 0 {
 		return

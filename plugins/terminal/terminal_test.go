@@ -350,10 +350,10 @@ func TestScrollbarDrag(t *testing.T) {
 	}
 }
 
-// The bar takes the window theme's ScrollbarWidth and Scrollbar, and its
-// strip, which ScrollbarStrip tells, is as much wider; with the theme's
-// ScrollbarsAlways it shows with the pointer off the view and the
-// viewport at the bottom.
+// The bar takes the window theme's ScrollbarWidth, ScrollbarMinLength and
+// Scrollbar, and its strip, which ScrollbarStrip tells, is as much wider;
+// with the theme's ScrollbarsAlways it shows with the pointer off the view
+// and the viewport at the bottom.
 func TestScrollbarTheme(t *testing.T) {
 	loadLib(t)
 	term, err := New(Options{Conn: newPipe()})
@@ -365,27 +365,29 @@ func TestScrollbarTheme(t *testing.T) {
 	tt := ui.NewTester(func(c *ui.Context) {
 		if themed {
 			th := *c.Theme()
-			th.ScrollbarWidth, th.ScrollbarsAlways = 16, true
+			th.ScrollbarWidth, th.ScrollbarMinLength, th.ScrollbarsAlways = 16, 100, true
 			c.SetTheme(&th)
 		}
 		View(c, term).Fill().AutoFocus()
 	}, 400, 200)
-	term.Feed([]byte(strings.Repeat("line\r\n", 100)))
+	term.Feed([]byte(strings.Repeat("line\r\n", 1000)))
 	tt.Move(-20, -20)
 	tt.Frame()
 	if s := term.ScrollbarStrip(); s != 22 {
 		t.Errorf("strip %v, want 22", s)
 	}
-	// paints reports whether the bar paints at (x, 188), by the pixel at
+	// paintsAt reports whether the bar paints at (x, y), by the pixel at
 	// x = 300, off it.
-	paints := func(x int) bool {
+	paintsAt := func(x, y int) bool {
 		img := tt.Image()
 		s := img.Bounds().Dx() / 400
-		return img.RGBAAt(x*s, 188*s) != img.RGBAAt(300*s, 188*s)
+		return img.RGBAAt(x*s, y*s) != img.RGBAAt(300*s, y*s)
 	}
-	// 16 wide from 3 in: x 381 to 397.
-	if !paints(383) || paints(375) {
-		t.Errorf("a bar 16 wide, always shown: at 383 %v, at 375 %v", paints(383), paints(375))
+	paints := func(x int) bool { return paintsAt(x, 188) }
+	// 16 wide from 3 in: x 381 to 397; 100 long at least, though 1,000
+	// lines make it a few DIPs: up from the bottom past y = 110.
+	if !paints(383) || paints(375) || !paintsAt(383, 110) {
+		t.Errorf("a bar 16 wide, 100 long, always shown: at 383 %v, at 375 %v, at 383,110 %v", paints(383), paints(375), paintsAt(383, 110))
 	}
 	tt.Move(380, 100)
 	tt.Frame()

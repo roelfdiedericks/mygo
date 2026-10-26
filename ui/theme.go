@@ -41,13 +41,16 @@ type Theme struct {
 	Inverse     Color
 	InverseText Color
 	// Scrollbar colors scroll bar thumbs, ScrollbarWidth DIPs wide (6 by
-	// default; 0 is 6). ScrollbarsAlways shows a scroll container's bars
-	// while its content overflows it, as macOS's "Always" does, rather
-	// than only while the pointer is over it or drags a bar; a press on a
-	// track then pages at once.
-	Scrollbar        Color
-	ScrollbarWidth   float32
-	ScrollbarsAlways bool
+	// default; 0 is 6), as long as the view is of what scrolls but
+	// ScrollbarMinLength DIPs at least (48 by default; 0 is 48), so that a
+	// long document's is still easy to take. ScrollbarsAlways shows a
+	// scroll container's bars while its content overflows it, as macOS's
+	// "Always" does, rather than only while the pointer is over it or
+	// drags a bar; a press on a track then pages at once.
+	Scrollbar          Color
+	ScrollbarWidth     float32
+	ScrollbarMinLength float32
+	ScrollbarsAlways   bool
 	// Radius rounds the corners of controls.
 	Radius float32
 	// Spacing is the unit of the room widgets leave inside and between
@@ -88,6 +91,11 @@ func (t *Theme) scrollbarWidth() float32 {
 		return 6
 	}
 	return t.ScrollbarWidth
+}
+
+// barLook is how the theme's scroll bars look (scrollBars).
+func (t *Theme) barLook() barLook {
+	return barLook{t.scrollbarWidth(), t.ScrollbarMinLength}
 }
 
 // Rem returns n times the theme's FontSize, as CSS's rem, to size elements
