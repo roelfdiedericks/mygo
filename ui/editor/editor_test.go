@@ -210,6 +210,27 @@ func TestCodeEditorScrollbar(t *testing.T) {
 	ct.want("|" + strings.Repeat("x", 200))
 }
 
+// The editor's scroll bars are as wide as the theme's ScrollbarWidth says,
+// with their track's 2 DIPs each side: a wide one takes the pointer over
+// its width, where a default one leaves the text.
+func TestCodeEditorScrollbarWidth(t *testing.T) {
+	st := &State{Buffer: NewBuffer("package main\n\nfunc main() {}\n")}
+	tt := ui.NewTester(func(c *ui.Context) {
+		th := *c.Theme()
+		th.ScrollbarWidth = 16
+		c.SetTheme(&th)
+		View(c, st).Fill().AutoFocus()
+	}, 600, 400)
+	tt.Frame()
+	if w := st.ed.trackWidth(); w != 20 {
+		t.Errorf("track %v DIPs wide, want 20", w)
+	}
+	tt.Move(600-18, 5)
+	if c := tt.Cursor(); c != ui.CursorDefault {
+		t.Errorf("cursor over the wide scroll bar %v, want the arrow", c)
+	}
+}
+
 func TestCodeEditorMultiCursor(t *testing.T) {
 	ct := newEditorTest(t, "go", "foo := 1\nbar := foo\nfoo++")
 	ct.st.Select(0, 0)

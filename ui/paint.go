@@ -1066,8 +1066,8 @@ func (p *Painter) scrollbars(e *node) {
 	}
 	dragging := rt.scrollDrag.st == st
 	// A press takes the bars only where the window shows them
-	// (scrollbarPress).
-	st.barsShown = hovered || dragging
+	// (scrollbarPress), which a theme may have it do always.
+	st.barsShown = hovered || dragging || theme.ScrollbarsAlways
 	if !st.barsShown {
 		return
 	}

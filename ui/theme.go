@@ -41,9 +41,13 @@ type Theme struct {
 	Inverse     Color
 	InverseText Color
 	// Scrollbar colors scroll bar thumbs, ScrollbarWidth DIPs wide (6 by
-	// default; 0 is 6).
-	Scrollbar      Color
-	ScrollbarWidth float32
+	// default; 0 is 6). ScrollbarsAlways shows a scroll container's bars
+	// while its content overflows it, as macOS's "Always" does, rather
+	// than only while the pointer is over it or drags a bar; a press on a
+	// track then pages at once.
+	Scrollbar        Color
+	ScrollbarWidth   float32
+	ScrollbarsAlways bool
 	// Radius rounds the corners of controls.
 	Radius float32
 	// Spacing is the unit of the room widgets leave inside and between

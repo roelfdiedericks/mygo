@@ -133,6 +133,14 @@ type Options struct {
 	// library's, which it drops whole.
 	Scrollback      int
 	ScrollbackLines int
+	// ScrollbarWidth is how wide the scroll bar is, in DIPs: 4 when zero,
+	// 4 wider while the pointer is over it or drags it; its strip at the
+	// right edge, where it takes the pointer, is 8 wider than it
+	// (ScrollbarStrip). ScrollbarsAlways shows it while there is a
+	// scrollback, rather than as the viewport moves and a while after.
+	// SetScrollbar changes both.
+	ScrollbarWidth   float32
+	ScrollbarsAlways bool
 	// OptionAsAlt makes Option on macOS the Alt key of programs (Meta),
 	// rather than the key that types accented letters and symbols.
 	OptionAsAlt bool
@@ -940,6 +948,36 @@ func (t *Terminal) SetMinimumContrast(ratio float32) {
 	t.mu.Unlock()
 	t.redraw()
 }
+
+// SetScrollbar changes the scroll bar's width and whether it always
+// shows, as Options.ScrollbarWidth and ScrollbarsAlways.
+func (t *Terminal) SetScrollbar(width float32, always bool) {
+	t.mu.Lock()
+	t.opts.ScrollbarWidth, t.opts.ScrollbarsAlways = width, always
+	t.mu.Unlock()
+	t.redraw()
+}
+
+// ScrollbarStrip returns how wide the strip at the view's right edge is
+// over which the scroll bar takes the pointer, in DIPs: what an app
+// draws over the view leaves it clear to keep the bar in reach.
+func (t *Terminal) ScrollbarStrip() float32 {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.barStrip()
+}
+
+// barWidth is the scroll bar's width, as Options.ScrollbarWidth says, and
+// barStrip its strip's: the bar 4 DIPs wider while lit, 2 in from the
+// edge, and 2 to spare. t.mu is held.
+func (t *Terminal) barWidth() float32 {
+	if t.opts.ScrollbarWidth > 0 {
+		return t.opts.ScrollbarWidth
+	}
+	return 4
+}
+
+func (t *Terminal) barStrip() float32 { return t.barWidth() + 8 }
 
 // UseTheme gives a terminal no view shows the colors of one that does, as
 // a server's for the window showing its session: programs asking the

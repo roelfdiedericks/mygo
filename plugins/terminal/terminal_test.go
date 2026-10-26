@@ -357,6 +357,54 @@ func TestScrollbarDrag(t *testing.T) {
 	}
 }
 
+// A wide scroll bar takes the pointer over a strip as much wider, which
+// ScrollbarStrip tells, and paints as wide; one that always shows stays
+// with the pointer elsewhere and the viewport still, until there is no
+// scrollback. SetScrollbar changes both.
+func TestScrollbarWidthAlways(t *testing.T) {
+	loadLib(t)
+	term, err := New(Options{Conn: newPipe(), ScrollbarWidth: 16, ScrollbarsAlways: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer term.Close()
+	if s := term.ScrollbarStrip(); s != 24 {
+		t.Errorf("strip %v, want 24", s)
+	}
+	tt := ui.NewTester(func(c *ui.Context) { View(c, term).Fill().AutoFocus() }, 400, 200)
+	term.Feed([]byte(strings.Repeat("line\r\n", 100)))
+	tt.Frame()
+	// paints reports whether the bar paints at (x, 188), by the pixel at
+	// x = 300, off it.
+	paints := func(x int) bool {
+		img := tt.Image()
+		s := img.Bounds().Dx() / 400
+		return img.RGBAAt(x*s, 188*s) != img.RGBAAt(300*s, 188*s)
+	}
+	tt.Move(100, 100)
+	tt.Advance(3 * time.Second)
+	tt.Frame()
+	// Idle, 16 wide from 3 in: x 381 to 397.
+	if !paints(383) || paints(375) {
+		t.Errorf("an always shown bar 16 wide: at 383 %v, at 375 %v", paints(383), paints(375))
+	}
+	tt.Move(380, 100)
+	tt.Frame()
+	if c := tt.Cursor(); c != ui.CursorDefault {
+		t.Errorf("over the wide strip, the pointer is %v, want the arrow", c)
+	}
+	term.SetScrollbar(0, false)
+	tt.Move(100, 100)
+	tt.Advance(3 * time.Second)
+	tt.Frame()
+	if paints(395) {
+		t.Error("the default bar did not fade out")
+	}
+	if s := term.ScrollbarStrip(); s != 12 {
+		t.Errorf("default strip %v, want 12", s)
+	}
+}
+
 // A match that wraps from a row above the viewport shows on the rows of it
 // that the viewport shows.
 func TestSearchWrappedMatch(t *testing.T) {

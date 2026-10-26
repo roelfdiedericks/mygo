@@ -15,7 +15,19 @@ type scrollbarDrag struct {
 	grab       float32 // where in the thumb the press caught it
 }
 
+// scrollbarWidth is the width of the scroll bars' tracks with the
+// theme's ScrollbarWidth unset (6, MyGo's): the thumb, and 2 DIPs each
+// side of it.
 const scrollbarWidth = 10
+
+// barWidth is the width of the scroll bars' tracks by the theme's
+// ScrollbarWidth: the thumb that wide, and 2 DIPs each side of it.
+func barWidth(t *ui.Theme) float32 {
+	if t == nil || t.ScrollbarWidth <= 0 {
+		return scrollbarWidth
+	}
+	return t.ScrollbarWidth + 4
+}
 
 // input takes the editor's input as it comes.
 func (ed *editor) input(ev ui.InputEvent) bool {
@@ -153,10 +165,10 @@ const (
 
 func (ed *editor) regionAt(x, y float32) region {
 	vertical, horizontal := ed.scrollbars()
-	if vertical && x >= ed.r.W-scrollbarWidth {
+	if vertical && x >= ed.r.W-ed.barW {
 		return regionVScroll
 	}
-	if horizontal && y >= ed.viewH-scrollbarWidth {
+	if horizontal && y >= ed.viewH-ed.barW {
 		return regionHScroll
 	}
 	if x < ed.gutterW {
@@ -424,7 +436,7 @@ func (ed *editor) trackWidth() float32 {
 	if ed.o.fitContent {
 		return 0
 	}
-	return scrollbarWidth
+	return ed.barW
 }
 
 // scrollbars reports which scroll bars the editor shows, and takes
@@ -435,7 +447,7 @@ func (ed *editor) scrollbars() (vertical, horizontal bool) {
 	if ed.o.noScrollbar || ed.o.fitContent {
 		return false, false
 	}
-	return ed.scrollMax() > 0, !ed.view.wrap && ed.view.maxLine > ed.r.W-ed.textX-scrollbarWidth
+	return ed.scrollMax() > 0, !ed.view.wrap && ed.view.maxLine > ed.r.W-ed.textX-ed.barW
 }
 
 func (ed *editor) maxScrollX() float32 {
@@ -463,7 +475,7 @@ func (ed *editor) dragScrollbar(ev ui.InputEvent) {
 	t0, t1 := ed.thumb(ed.scrollbar.horizontal)
 	size := t1 - t0
 	if ed.scrollbar.horizontal {
-		track := ed.r.W - ed.textX - scrollbarWidth
+		track := ed.r.W - ed.textX - ed.barW
 		f := (ev.X - ed.textX - ed.scrollbar.grab) / max(1, track-size)
 		ed.scrollX = max(0, min(f*ed.maxScrollX(), ed.maxScrollX()))
 		if s := ed.o.sharedScroll; s != nil {
@@ -489,7 +501,7 @@ func (ed *editor) setScrollShared(y float64) {
 // thumb returns where the scroll bar's thumb is along its track.
 func (ed *editor) thumb(horizontal bool) (float32, float32) {
 	if horizontal {
-		track := ed.r.W - ed.textX - scrollbarWidth
+		track := ed.r.W - ed.textX - ed.barW
 		content := ed.view.maxLine + ed.view.charWidth*4
 		size := max(24, track*track/max(content, track))
 		f := float32(0)

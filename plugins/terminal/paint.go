@@ -824,7 +824,8 @@ const (
 // drawScrollbar shows where the viewport is in the scrollback, as macOS's
 // overlay scroll bars do: as the viewport moves, and while the pointer is
 // over the bar's strip or drags it, when it widens; a while after, it
-// fades out.
+// fades out. Options.ScrollbarsAlways keeps it, Options.ScrollbarWidth
+// sizes it.
 func (v *view) drawScrollbar(p *ui.Painter, r ui.Rect) {
 	sb := v.scrollbar
 	now := p.Now()
@@ -840,7 +841,7 @@ func (v *view) drawScrollbar(p *ui.Painter, r ui.Rect) {
 		return
 	}
 	a := float32(1)
-	if !lit {
+	if !lit && !v.t.opts.ScrollbarsAlways {
 		switch d := now.Sub(v.barSeen); {
 		case d < barLinger:
 			p.After(barLinger - d)
@@ -853,9 +854,9 @@ func (v *view) drawScrollbar(p *ui.Painter, r ui.Rect) {
 	}
 	fg := color(v.colors.Foreground)
 	y, h := thumb(sb, r.H)
-	w, inset, c := float32(4), float32(3), fg.Alpha(0.35*a)
+	w, inset, c := v.t.barWidth(), float32(3), fg.Alpha(0.35*a)
 	if lit {
-		w, inset = 8, 2
+		w, inset = w+4, 2
 		if v.barHeld {
 			c = fg.Alpha(0.5)
 		}

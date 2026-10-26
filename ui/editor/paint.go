@@ -762,8 +762,8 @@ func (ed *editor) paintScrollbars(p *ui.Painter, r ui.Rect, f *frame) {
 	t := p.Theme()
 	vertical, horizontal := ed.scrollbars()
 	if vertical {
-		x := r.X + r.W - scrollbarWidth
-		track := ui.Rect{X: x, Y: r.Y, W: scrollbarWidth, H: r.H}
+		x := r.X + r.W - ed.barW
+		track := ui.Rect{X: x, Y: r.Y, W: ed.barW, H: r.H}
 		hovered := ed.pointerIn && ed.region == regionVScroll
 		if hovered || ed.scrollbar.active {
 			p.Fill(track, t.Scrollbar.Alpha(0.15), 0)
@@ -829,24 +829,24 @@ func (ed *editor) paintScrollbars(p *ui.Painter, r ui.Rect, f *frame) {
 		// Carets.
 		if len(ed.sels) <= 100 {
 			for _, s := range ed.sels {
-				mark(h.top(v.text.LineOf(s.head)), 2, 0, scrollbarWidth, ct.Text.Alpha(0.5))
+				mark(h.top(v.text.LineOf(s.head)), 2, 0, ed.barW, ct.Text.Alpha(0.5))
 			}
 		}
 		t0, t1 := ed.thumb(false)
-		thumb := ui.Rect{X: x + 2, Y: r.Y + t0, W: scrollbarWidth - 4, H: t1 - t0}
+		thumb := ui.Rect{X: x + 2, Y: r.Y + t0, W: ed.barW - 4, H: t1 - t0}
 		alpha := float32(0.5)
 		if hovered || ed.scrollbar.active {
 			alpha = 0.9
 		}
-		p.Fill(thumb, t.Scrollbar.Alpha(alpha), (scrollbarWidth-4)/2)
+		p.Fill(thumb, t.Scrollbar.Alpha(alpha), (ed.barW-4)/2)
 	}
 	if horizontal {
 		t0, t1 := ed.thumb(true)
-		y := r.Y + r.H - scrollbarWidth
+		y := r.Y + r.H - ed.barW
 		alpha := float32(0.4)
 		if ed.pointerIn && ed.region == regionHScroll || ed.scrollbar.active {
 			alpha = 0.9
 		}
-		p.Fill(ui.Rect{X: r.X + ed.textX + t0, Y: y + 2, W: t1 - t0, H: scrollbarWidth - 4}, t.Scrollbar.Alpha(alpha), (scrollbarWidth-4)/2)
+		p.Fill(ui.Rect{X: r.X + ed.textX + t0, Y: y + 2, W: t1 - t0, H: ed.barW - 4}, t.Scrollbar.Alpha(alpha), (ed.barW-4)/2)
 	}
 }

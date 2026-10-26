@@ -1264,19 +1264,15 @@ func (v *view) linkUnder(mods ui.Modifiers, x, y float32) (link string, path boo
 	return v.linkAt(v.cellAt(x, y))
 }
 
-// scrollbarStrip is how wide the strip at the right edge is over which the
-// scroll bar takes the pointer, in DIPs.
-const scrollbarStrip = 12
-
 // overScrollbar reports whether the scroll bar takes the pointer at (x, y):
-// over its strip while there is a scrollback, which shows the bar, or
-// while it is dragged; t.mu is held.
+// over its strip (ScrollbarStrip) while there is a scrollback, which
+// shows the bar, or while it is dragged; t.mu is held.
 func (v *view) overScrollbar(x, y float32) bool {
 	if v.barHeld {
 		return true
 	}
 	w, h := v.size[0], v.size[1]
-	if x < w-scrollbarStrip || x >= w || y < 0 || y >= h {
+	if x < w-v.t.barStrip() || x >= w || y < 0 || y >= h {
 		return false
 	}
 	sb := v.t.term.Scrollbar()

@@ -226,6 +226,39 @@ func TestHiddenScrollbarPassesPress(t *testing.T) {
 	}
 }
 
+// With the theme's ScrollbarsAlways, a container whose content overflows
+// shows its bar with the pointer elsewhere, and a first press on its
+// track pages.
+func TestScrollbarsAlways(t *testing.T) {
+	var sc *node
+	tt := coreNewTester(func(c *context) {
+		th := *c.Theme()
+		th.ScrollbarsAlways = true
+		c.SetTheme(&th)
+		coreRow(c).Children(func() {
+			sc = coreScroll(c).Size(100, 200).Children(func() { coreBox(c).Size(100, 800) })
+		})
+	}, 300, 200)
+	defer tt.rt.close()
+	tt.Move(250, 150)
+	tt.Frame()
+	st := sc.st
+	if !st.barsShown {
+		t.Error("the bar of overflowing content does not show with the pointer elsewhere")
+	}
+	g := scrollBars(Rect{st.x, st.y, st.w, st.h}, st.barInset, float32(st.contentW), float32(st.contentH), 0, 0, st.flags, tt.rt.c.theme.scrollbarWidth(), false)
+	if !g.vertical {
+		t.Fatal("no vertical bar")
+	}
+	x, y := g.vTrack.X+g.vTrack.W/2, g.v.Y+g.v.H+20
+	tt.Press(x, y)
+	tt.Release(x, y)
+	tt.Frame()
+	if st.scrollY == 0 {
+		t.Error("a first press on the track did not page")
+	}
+}
+
 // A release that comes while a handler handles its press, through a main
 // loop it runs nested, as GTK's clipboard waits do, ends the press once it
 // is recorded: the handler hears of it after the press, and the element a

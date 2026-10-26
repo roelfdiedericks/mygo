@@ -160,6 +160,10 @@ term, err := terminal.New(terminal.Options{
   drops whole pages of its oldest lines, so it keeps between that number
   less a page's lines (a few hundred at 80 columns, fewer when wider) and
   that number.
+- `ScrollbarWidth` sizes the scroll bar, 4 DIPs by default and 4 wider
+  while the pointer is over it, and `ScrollbarsAlways` keeps it shown
+  while there is a scrollback, rather than as the view scrolls and a
+  while after; `SetScrollbar` changes both in a running terminal.
 - `MinimumContrast` is the least contrast text has with its background,
   as Ghostty's `minimum-contrast`: a WCAG ratio from 1 (none, the
   default) to 21. Text with less, as a program's light gray on a light
@@ -596,7 +600,10 @@ box.HandleInput(func(ev ui.InputEvent) bool {
 
 `ScrollRows`, `ScrollToTop` and `ScrollToBottom` scroll the scrollback
 from code, as keys of the app's would, without the program getting them
-as the wheel.
+as the wheel. What the app draws over the view hides the scroll bar
+there, which paints with the view; `ScrollbarStrip` is how wide the strip
+at the view's right edge is where the bar takes the pointer, which the
+app's elements leave clear to keep the bar in sight and in reach.
 
 ## A server's terminal, shown elsewhere
 

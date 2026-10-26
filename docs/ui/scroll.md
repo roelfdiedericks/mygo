@@ -84,7 +84,8 @@ edited as it takes the focus, not its first.
 A scroll container whose content overflows it shows the thumbs of its
 scroll bars over its content while the pointer is over it, which the user
 drags; they take no room. Right to left, the vertical bar is on the left. The theme's `ScrollbarWidth` sets their width and
-its `Scrollbar` their color.
+its `Scrollbar` their color; its `ScrollbarsAlways` shows them as long as
+the content overflows, wherever the pointer is.
 
 `ScrollbarInsets` moves the bars in from the container's edges, CSS style
 as `Padding`: the vertical bar runs from the top inset to the bottom one,
