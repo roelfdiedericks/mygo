@@ -196,14 +196,15 @@ type view struct {
 	pointer              [2]float32
 	// barHeld tells that the primary button drags the scroll bar, held
 	// barGrab DIPs below the thumb's top; overBar that the pointer is over
-	// the bar, as of its last move, and barHover as of the last build.
-	// barLit is whether the last paint showed the bar hovered or held,
-	// barBack how many rows the viewport was above the bottom, and barSeen
-	// when either last changed, from which the bar fades out.
-	barHeld, overBar, barHover, barLit bool
-	barGrab                            float32
-	barBack                            int64
-	barSeen                            time.Time
+	// the bar, as of its last move, and barHover as of the last build;
+	// viewHover that the pointer was over the view. barW, barColor and
+	// barAlways are the window theme's ScrollbarWidth (6 when it says
+	// none), Scrollbar and ScrollbarsAlways, as the last build read them.
+	barHeld, overBar, barHover, viewHover bool
+	barGrab                               float32
+	barW                                  float32
+	barColor                              ui.Color
+	barAlways                             bool
 	// hover is the link Command is held over, which a click opens and
 	// which shows underlined, hoverLink what it opens and hoverPath
 	// whether that is a file path (HoveredLink); linkPress: the primary
@@ -267,7 +268,8 @@ func (v *view) build(c *ui.Context, e ui.Element) {
 		t.dropFiles(files)
 	}
 	v.lang = c.Locale()
-	dark := c.Theme().Dark
+	th := c.Theme()
+	dark := th.Dark
 	focused := e.Focused()
 	t.mu.Lock()
 	theme := t.opts.Theme
@@ -277,6 +279,11 @@ func (v *view) build(c *ui.Context, e ui.Element) {
 		theme = defaultTheme(dark)
 	}
 	v.theme = theme
+	v.barW, v.barColor, v.barAlways = th.ScrollbarWidth, th.Scrollbar, th.ScrollbarsAlways
+	if v.barW <= 0 {
+		v.barW = 6
+	}
+	v.viewHover = e.Hovered()
 	if t.term == nil {
 		v.release()
 		v.reads, v.clipPrompt, v.clipOpen = nil, nil, false
@@ -1265,24 +1272,25 @@ func (v *view) linkUnder(mods ui.Modifiers, x, y float32) (link string, path boo
 }
 
 // overScrollbar reports whether the scroll bar takes the pointer at (x, y):
-// over its strip (ScrollbarStrip) while there is a scrollback, which
-// shows the bar, or while it is dragged; t.mu is held.
+// over its strip (ScrollbarStrip) while there is a scrollback, or while
+// it is dragged; t.mu is held.
 func (v *view) overScrollbar(x, y float32) bool {
 	if v.barHeld {
 		return true
 	}
 	w, h := v.size[0], v.size[1]
-	if x < w-v.t.barStrip() || x >= w || y < 0 || y >= h {
+	if x < w-barStrip(v.barW) || x >= w || y < 0 || y >= h {
 		return false
 	}
 	sb := v.t.term.Scrollbar()
 	return sb.Total > sb.Len
 }
 
-// scrollbarEvent drags the scroll bar, and reports whether it took the
-// event: a press on the thumb holds it where it is pressed, and one on the
-// rest of the strip by its middle, which comes to the pointer; the moves
-// until the release scroll the scrollback along. t.mu is held.
+// scrollbarEvent takes the scroll bar's presses, as a scroll container's
+// bar does, and reports whether it took the event: a press on the thumb
+// holds it where it is pressed, and the moves until the release scroll
+// the scrollback along; one on the track above or below it scrolls a
+// page that way. t.mu is held.
 func (v *view) scrollbarEvent(ev ui.InputEvent) bool {
 	if over := v.overScrollbar(ev.X, ev.Y); over != v.overBar {
 		v.overBar = over
@@ -1295,13 +1303,19 @@ func (v *view) scrollbarEvent(ev ui.InputEvent) bool {
 	case v.barHeld:
 		v.dragScrollbar(ev.Y)
 	case v.overBar && ev.Kind == ui.InputPointerDown && ev.Button == 0:
-		y, h := thumb(v.t.term.Scrollbar(), v.size[1])
-		v.barGrab = h / 2
-		if ev.Y >= y && ev.Y < y+h {
-			v.barGrab = ev.Y - y
+		term := v.t.term
+		y, h := thumb(term.Scrollbar(), v.size[1])
+		_, rows := term.Size()
+		page := max(rows*9/10, 1)
+		switch {
+		case ev.Y >= y && ev.Y < y+h:
+			v.barGrab, v.barHeld = ev.Y-y, true
+		case ev.Y < y:
+			term.ScrollBy(-page)
+		default:
+			term.ScrollBy(page)
 		}
-		v.barHeld = true
-		v.dragScrollbar(ev.Y)
+		v.services.Invalidate()
 	default:
 		return false
 	}
@@ -1317,11 +1331,11 @@ func (v *view) dragScrollbar(y float32) {
 		return
 	}
 	_, h := thumb(sb, v.size[1])
-	travel := v.size[1] - h
+	travel := v.size[1] - 4 - h
 	if travel <= 0 {
 		return
 	}
-	f := max(0, min((y-v.barGrab)/travel, 1))
+	f := max(0, min((y-2-v.barGrab)/travel, 1))
 	to := int(math.Round(float64(f) * float64(sb.Total-sb.Len)))
 	if d := to - int(sb.Offset); d != 0 {
 		term.ScrollBy(d)

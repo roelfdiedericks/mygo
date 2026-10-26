@@ -108,7 +108,11 @@ The terminal does what terminal apps do:
 - **Scrolling**: the wheel and the touchpad scroll the scrollback, as do
   Shift+Page Up and Shift+Page Down. Full-screen programs get the wheel as
   arrow keys, or as mouse reports when they take the mouse. Typing scrolls
-  back to the bottom.
+  back to the bottom. The scroll bar is the window's scroll containers',
+  as the theme draws them (`Scrollbar`, `ScrollbarWidth`): it shows while
+  the pointer is over the view, while the view is up from the bottom, and
+  always with the theme's `ScrollbarsAlways`; its thumb drags, and a
+  press on its track scrolls a page.
 - **Zooming**: the wheel with Control held (Command on macOS), and
   Control (Command) with =, - and 0 make the text larger, smaller, and its
   size again, a DIP a step, as in Ghostty; `OnZoom` takes zooms instead.
@@ -160,10 +164,6 @@ term, err := terminal.New(terminal.Options{
   drops whole pages of its oldest lines, so it keeps between that number
   less a page's lines (a few hundred at 80 columns, fewer when wider) and
   that number.
-- `ScrollbarWidth` sizes the scroll bar, 4 DIPs by default and 4 wider
-  while the pointer is over it, and `ScrollbarsAlways` keeps it shown
-  while there is a scrollback, rather than as the view scrolls and a
-  while after; `SetScrollbar` changes both in a running terminal.
 - `MinimumContrast` is the least contrast text has with its background,
   as Ghostty's `minimum-contrast`: a WCAG ratio from 1 (none, the
   default) to 21. Text with less, as a program's light gray on a light

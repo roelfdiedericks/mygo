@@ -1083,18 +1083,13 @@ func (p *Painter) scrollbars(e *node) {
 		y = rescale(y, e.contentH-float64(e.h), h-float64(e.h))
 	}
 	g := scrollBars(Rect{e.x, e.y, e.w, e.h}, e.barInset, float32(w), float32(h), float32(x), float32(y), e.flags, theme.scrollbarWidth(), e.rtl())
+	// A bar keeps its width, dragged as at rest.
 	if g.vertical {
 		bar := g.v
-		if dragging && !rt.scrollDrag.horizontal {
-			bar.X, bar.W = bar.X-2, bar.W+2
-		}
 		p.fill(bar, [4]float32{bar.W / 2, bar.W / 2, bar.W / 2, bar.W / 2}, color, 0, Color{})
 	}
 	if g.horizontal {
 		bar := g.h
-		if dragging && rt.scrollDrag.horizontal {
-			bar.Y, bar.H = bar.Y-2, bar.H+2
-		}
 		p.fill(bar, [4]float32{bar.H / 2, bar.H / 2, bar.H / 2, bar.H / 2}, color, 0, Color{})
 	}
 }

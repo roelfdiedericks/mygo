@@ -257,10 +257,11 @@ func TestScrollbackLines(t *testing.T) {
 	}
 }
 
-// TestScrollbarDrag: the scroll bar shows as the viewport moves, and over
-// its strip, where the pointer is the arrow rather than the I-beam, and
-// fades out a while after. It drags the scrollback along: by the thumb, or
-// from where the track is pressed.
+// TestScrollbarDrag: the scroll bar is the window's scroll containers'.
+// It shows with the pointer over the view, and while the viewport is up
+// from the bottom; over its strip the pointer is the arrow rather than
+// the I-beam. It drags the scrollback along by the thumb, and a press on
+// the track scrolls a page.
 func TestScrollbarDrag(t *testing.T) {
 	loadLib(t)
 	term, err := New(Options{Conn: newPipe()})
@@ -280,27 +281,29 @@ func TestScrollbarDrag(t *testing.T) {
 		defer term.mu.Unlock()
 		return term.term.Scrollbar().Offset
 	}
-	// shows reports whether the bar paints at (395, y), by the pixel off
-	// its strip.
+	// shows reports whether the bar paints at (394, y), by the pixel off
+	// its strip; the bar is 6 wide, 3 in from the edge.
 	shows := func(y int) bool {
 		img := tt.Image()
 		s := img.Bounds().Dx() / 400
-		return img.RGBAAt(395*s, y*s) != img.RGBAAt(380*s, y*s)
+		return img.RGBAAt(394*s, y*s) != img.RGBAAt(380*s, y*s)
 	}
 	bottom := offset()
-	tt.Move(100, 100)
+	tt.Move(-20, -20)
 	tt.Frame()
 	if shows(188) {
-		t.Error("the bar shows at the bottom, the pointer elsewhere")
+		t.Error("the bar shows at the bottom, the pointer off the view")
 	}
-	// Over the strip, at the bottom: the bar, and the arrow.
+	tt.Move(100, 100)
+	tt.Frame()
+	if !shows(188) {
+		t.Error("the bar doesn't show with the pointer over the view")
+	}
+	// Over the strip: the arrow.
 	tt.Move(395, 100)
 	tt.Frame()
 	if c := tt.Cursor(); c != ui.CursorDefault {
 		t.Errorf("over the bar, the pointer is %v, want the arrow", c)
-	}
-	if !shows(188) {
-		t.Error("the bar doesn't show with the pointer over it")
 	}
 	// The thumb, at the bottom, dragged halfway up and past the top.
 	tt.Press(395, 188)
@@ -325,28 +328,18 @@ func TestScrollbarDrag(t *testing.T) {
 	if c := tt.Cursor(); c != ui.CursorText {
 		t.Errorf("over the text, the pointer is %v, want the I-beam", c)
 	}
-	// It stays a while, and fades out though the viewport is up.
-	tt.Advance(500 * time.Millisecond)
+	// Up from the bottom, it shows with the pointer off the view.
+	tt.Move(-20, -20)
 	tt.Frame()
 	if !shows(12) {
-		t.Error("the bar went at once")
+		t.Error("the bar doesn't show with the viewport up")
 	}
-	tt.Advance(2 * time.Second)
-	tt.Frame()
-	if shows(12) {
-		t.Error("the bar didn't fade out")
-	}
-	// A wheel shows it again.
-	tt.Wheel(100, 100, 0, 40)
-	tt.Frame()
-	if !shows(15) {
-		t.Error("scrolling didn't show the bar")
-	}
-	// A press low on the track brings the thumb there.
+	// A press on the track below the thumb scrolls a page.
+	_, rows := term.Size()
 	tt.Press(395, 190)
 	tt.Release(395, 190)
-	if got := offset(); got < bottom/2 {
-		t.Errorf("after a press low on the track, offset = %d, want past %d", got, bottom/2)
+	if got, want := offset(), uint64(max(rows*9/10, 1)); got != want {
+		t.Errorf("after a press low on the track, offset = %d, want a page, %d", got, want)
 	}
 	// A full-screen program's screen has no scrollback, and no bar.
 	term.Feed([]byte("\x1b[?1049h"))
@@ -357,23 +350,32 @@ func TestScrollbarDrag(t *testing.T) {
 	}
 }
 
-// A wide scroll bar takes the pointer over a strip as much wider, which
-// ScrollbarStrip tells, and paints as wide; one that always shows stays
-// with the pointer elsewhere and the viewport still, until there is no
-// scrollback. SetScrollbar changes both.
-func TestScrollbarWidthAlways(t *testing.T) {
+// The bar takes the window theme's ScrollbarWidth and Scrollbar, and its
+// strip, which ScrollbarStrip tells, is as much wider; with the theme's
+// ScrollbarsAlways it shows with the pointer off the view and the
+// viewport at the bottom.
+func TestScrollbarTheme(t *testing.T) {
 	loadLib(t)
-	term, err := New(Options{Conn: newPipe(), ScrollbarWidth: 16, ScrollbarsAlways: true})
+	term, err := New(Options{Conn: newPipe()})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer term.Close()
-	if s := term.ScrollbarStrip(); s != 24 {
-		t.Errorf("strip %v, want 24", s)
-	}
-	tt := ui.NewTester(func(c *ui.Context) { View(c, term).Fill().AutoFocus() }, 400, 200)
+	themed := true
+	tt := ui.NewTester(func(c *ui.Context) {
+		if themed {
+			th := *c.Theme()
+			th.ScrollbarWidth, th.ScrollbarsAlways = 16, true
+			c.SetTheme(&th)
+		}
+		View(c, term).Fill().AutoFocus()
+	}, 400, 200)
 	term.Feed([]byte(strings.Repeat("line\r\n", 100)))
+	tt.Move(-20, -20)
 	tt.Frame()
+	if s := term.ScrollbarStrip(); s != 22 {
+		t.Errorf("strip %v, want 22", s)
+	}
 	// paints reports whether the bar paints at (x, 188), by the pixel at
 	// x = 300, off it.
 	paints := func(x int) bool {
@@ -381,24 +383,20 @@ func TestScrollbarWidthAlways(t *testing.T) {
 		s := img.Bounds().Dx() / 400
 		return img.RGBAAt(x*s, 188*s) != img.RGBAAt(300*s, 188*s)
 	}
-	tt.Move(100, 100)
-	tt.Advance(3 * time.Second)
-	tt.Frame()
-	// Idle, 16 wide from 3 in: x 381 to 397.
+	// 16 wide from 3 in: x 381 to 397.
 	if !paints(383) || paints(375) {
-		t.Errorf("an always shown bar 16 wide: at 383 %v, at 375 %v", paints(383), paints(375))
+		t.Errorf("a bar 16 wide, always shown: at 383 %v, at 375 %v", paints(383), paints(375))
 	}
 	tt.Move(380, 100)
 	tt.Frame()
 	if c := tt.Cursor(); c != ui.CursorDefault {
 		t.Errorf("over the wide strip, the pointer is %v, want the arrow", c)
 	}
-	term.SetScrollbar(0, false)
-	tt.Move(100, 100)
-	tt.Advance(3 * time.Second)
+	themed = false
+	tt.Move(-20, -20)
 	tt.Frame()
-	if paints(395) {
-		t.Error("the default bar did not fade out")
+	if paints(394) {
+		t.Error("the bar shows at the bottom without ScrollbarsAlways, the pointer off the view")
 	}
 	if s := term.ScrollbarStrip(); s != 12 {
 		t.Errorf("default strip %v, want 12", s)
