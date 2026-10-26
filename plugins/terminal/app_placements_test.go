@@ -269,3 +269,40 @@ func TestScrollFromAppElement(t *testing.T) {
 		t.Error("a pointer event was taken")
 	}
 }
+
+// The pointer over an element the app draws over the view is over the
+// view for its scroll bar, which shows there as over the text, and goes
+// with the pointer off the view.
+func TestScrollbarUnderAppElement(t *testing.T) {
+	loadLib(t)
+	term, err := New(Options{Conn: newPipe(), Theme: LightTheme()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer term.Close()
+	tt := ui.NewTester(func(c *ui.Context) {
+		ui.Box(c).Fill().Children(func() {
+			View(c, term).Fill()
+			ui.Box(c).Absolute().Left(0).Top(0).Bottom(0).Right(40).Background(ui.RGB(1, 2, 3))
+		})
+	}, 400, 200)
+	_, rows := term.Size()
+	term.Feed([]byte(strings.Repeat("line\r\n", rows+20)))
+	// shows reports whether the bar paints at (394, 188), by the pixel off
+	// it, both clear of the element.
+	shows := func() bool {
+		img := tt.Image()
+		s := img.Bounds().Dx() / 400
+		return img.RGBAAt(394*s, 188*s) != img.RGBAAt(370*s, 188*s)
+	}
+	tt.Move(100, 100)
+	tt.Frame()
+	if !shows() {
+		t.Error("the bar doesn't show with the pointer over the app's element")
+	}
+	tt.Move(-20, -20)
+	tt.Frame()
+	if shows() {
+		t.Error("the bar shows with the pointer off the view")
+	}
+}

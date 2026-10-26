@@ -197,7 +197,8 @@ type view struct {
 	// barHeld tells that the primary button drags the scroll bar, held
 	// barGrab DIPs below the thumb's top; overBar that the pointer is over
 	// the bar, as of its last move, and barHover as of the last build;
-	// viewHover that the pointer was over the view. barW, barColor and
+	// viewHover that the pointer was over the view's box, under what the
+	// app draws over it too. barW, barColor and
 	// barAlways are the window theme's ScrollbarWidth (6 when it says
 	// none), Scrollbar and ScrollbarsAlways, as the last build read them.
 	barHeld, overBar, barHover, viewHover bool
@@ -283,7 +284,9 @@ func (v *view) build(c *ui.Context, e ui.Element) {
 	if v.barW <= 0 {
 		v.barW = 6
 	}
-	v.viewHover = e.Hovered()
+	// Over the view's box, whatever the app draws over it (AppPlacements):
+	// the scroll bar shows as over the text.
+	_, _, v.viewHover = e.PointerPosition()
 	if t.term == nil {
 		v.release()
 		v.reads, v.clipPrompt, v.clipOpen = nil, nil, false
