@@ -123,10 +123,10 @@ func layerOf(z int32) int {
 	return aboveText
 }
 
-// drawImages draws the images of a layer, within the grid.
-func (v *view) drawImages(p *ui.Painter, layer int, ox, oy float32) {
+// drawImages draws the images of a layer, placed from the rows' origin
+// ox, oy, within grid, which a glide moves the rows off.
+func (v *view) drawImages(p *ui.Painter, layer int, ox, oy float32, grid ui.Rect) {
 	s := v.scale
-	grid := ui.Rect{X: ox, Y: oy, W: float32(v.cols*v.cellW) / s, H: float32(v.rows*v.cellH) / s}
 	for _, im := range v.images {
 		if im.layer != layer {
 			continue
