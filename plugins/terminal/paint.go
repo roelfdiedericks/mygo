@@ -136,7 +136,9 @@ func (v *view) paint(p *ui.Painter, r ui.Rect) {
 	if !held {
 		t.rs.BeginUpdate(t.term)
 	}
+	prev := v.scrollbar
 	v.scrollbar = t.term.Scrollbar()
+	alt := t.term.AltScreen()
 	contrast := t.opts.MinimumContrast
 	tc, tr := t.term.Size()
 	v.matches, v.matchBuf = t.viewportMatches(v.matches, v.matchBuf, tc, tr)
@@ -152,6 +154,10 @@ func (v *view) paint(p *ui.Painter, r ui.Rect) {
 	full := rs.Dirty() == vt.Full || colors != v.colors || contrast != v.contrast
 	v.colors, v.contrast, v.cursor = colors, contrast, rs.Cursor()
 	cols, rows := rs.Size()
+	// A full-screen program's screen, or one held back, does not glide.
+	if v.glideMoved(prev, v.scrollbar, rows, held || alt) {
+		full = true
+	}
 	if len(v.lines) != rows {
 		v.lines = append(v.lines[:0], make([]rowCache, rows)...)
 		full = true
@@ -488,9 +494,11 @@ func (v *view) shape(text string, variant int, scale float32) []ui.Glyph {
 func (v *view) draw(p *ui.Painter, r ui.Rect) {
 	s := v.scale
 	cw, ch := float32(v.cellW)/s, float32(v.cellH)/s
-	// The grid starts at a whole pixel of the display.
+	// The grid starts at a whole pixel of the display, top; its rows
+	// from oy, which a glide moves off it.
 	ox := (float32(math.Round(float64(r.X*s))) + float32(v.ox)) / s
-	oy := (float32(math.Round(float64(r.Y*s))) + float32(v.oy)) / s
+	top := (float32(math.Round(float64(r.Y*s))) + float32(v.oy)) / s
+	oy := top + v.shift()
 	base := float32(v.baseline) / s
 	// A transparent terminal still draws a background a program set (OSC
 	// 11), as Ghostty shows it.
@@ -498,15 +506,27 @@ func (v *view) draw(p *ui.Painter, r ui.Rect) {
 		p.Fill(r, color(v.colors.Background), 0)
 	}
 	if v.t.opts.PaddingColor != PaddingBackground {
-		v.extendPadding(p, r, ox, oy, cw, ch)
+		v.extendPadding(p, r, ox, top, oy, cw, ch)
 	}
+	grid := ui.Rect{X: ox, Y: top, W: float32(v.cols) * cw, H: float32(v.rows) * ch}
+	if oy == top {
+		v.drawRows(p, r, grid, ox, oy, cw, ch, base)
+	} else {
+		// Gliding rows show in the grid's rows alone, across the view.
+		p.Clip(ui.Rect{X: r.X, Y: top, W: r.W, H: grid.H}, 0, func() { v.drawRows(p, r, grid, ox, oy, cw, ch, base) })
+	}
+	v.drawScrollbar(p, r)
+}
+
+// drawRows draws the rows from oy, the cursor, the search's matches and
+// the images, which show within grid.
+func (v *view) drawRows(p *ui.Painter, r, grid ui.Rect, ox, oy, cw, ch, base float32) {
 	selection := v.theme.Selection
 	if selection.A == 0 {
 		selection = color(v.colors.Foreground).Alpha(0.3)
 	}
-	v.drawImages(p, belowBackground, ox, oy)
-	for y := range v.lines {
-		line := &v.lines[y]
+	v.drawImages(p, belowBackground, ox, oy, grid)
+	for y, line := range v.shownRows() {
 		ry := oy + float32(y)*ch
 		for _, b := range line.bgs {
 			p.Fill(ui.Rect{X: ox + float32(b.x0)*cw, Y: ry, W: float32(b.x1-b.x0) * cw, H: ch}, b.c, 0)
@@ -525,14 +545,13 @@ func (v *view) draw(p *ui.Painter, r ui.Rect) {
 			p.Fill(ui.Rect{X: ox + float32(m.x0)*cw, Y: oy + float32(m.y)*ch, W: float32(m.x1-m.x0+1) * cw, H: ch}, c, 0)
 		}
 	}
-	v.drawImages(p, belowText, ox, oy)
+	v.drawImages(p, belowText, ox, oy, grid)
 	cur, curColor, curText, block := v.cursorRect(ox, oy, cw, ch)
 	if block {
 		p.Fill(cur, curColor, 0)
 	}
 	var spans []matchSpan
-	for y := range v.lines {
-		line := &v.lines[y]
+	for y, line := range v.shownRows() {
 		ry := oy + float32(y)*ch
 		text := func(over ui.Color) { v.drawText(p, line, ox, ry, cw, ch, base, over) }
 		spans = spans[:0]
@@ -570,7 +589,7 @@ func (v *view) draw(p *ui.Painter, r ui.Rect) {
 		p.Clip(ui.Rect{X: a, Y: r.Y, W: b - a, H: r.H}, 0, func() { text(v.theme.SelectionText) })
 		p.Clip(ui.Rect{X: b, Y: r.Y, W: r.X + r.W - b, H: r.H}, 0, func() { text(ui.Color{}) })
 	}
-	v.drawImages(p, aboveText, ox, oy)
+	v.drawImages(p, aboveText, ox, oy, grid)
 	if h := v.hover; h.on() && h.row < len(v.lines) {
 		v.drawDeco(p, deco{h.x0, h.x1, vt.UnderlineSingle, v.linkColor(&v.lines[h.row], h)}, ox, oy+float32(h.row)*ch, cw, ch, base)
 	}
@@ -578,7 +597,7 @@ func (v *view) draw(p *ui.Painter, r ui.Rect) {
 		if v.focused || v.cursor.Style != vt.CursorBlock {
 			p.Fill(cur, curColor, 0)
 		} else {
-			p.Stroke(cur, curColor, 0, 1/s)
+			p.Stroke(cur, curColor, 0, 1/v.scale)
 		}
 	}
 	if block && v.cursor.Y < len(v.lines) {
@@ -603,7 +622,6 @@ func (v *view) draw(p *ui.Painter, r ui.Rect) {
 	if v.preedit != "" && v.focused {
 		v.drawPreedit(p, ox, oy, cw, ch, base)
 	}
-	v.drawScrollbar(p, r)
 }
 
 // searchColors returns the colors of the search's matches and their text,
@@ -619,11 +637,12 @@ func (v *view) searchColors() (match, matchText, sel, selText ui.Color) {
 	return or(th.Search, "#ffe082"), or(th.SearchText, "#000000"), or(th.SearchSelected, "#f2a57e"), or(th.SearchSelectedText, "#000000")
 }
 
-// extendPadding paints the padding around the grid with the backgrounds
-// of the cells nearest to it (Options.PaddingColor): a row's beside it,
-// and the top and the bottom rows' above and below the grid, out to the
-// corners.
-func (v *view) extendPadding(p *ui.Painter, r ui.Rect, ox, oy, cw, ch float32) {
+// extendPadding paints the padding around the grid, from top, with the
+// backgrounds of the cells nearest to it (Options.PaddingColor): a row's
+// beside it, from oy as the rows are drawn, and the backgrounds of the
+// rows at the grid's top and bottom edges above and below the grid, out
+// to the corners.
+func (v *view) extendPadding(p *ui.Painter, r ui.Rect, ox, top, oy, cw, ch float32) {
 	if len(v.lines) == 0 {
 		return
 	}
@@ -644,18 +663,26 @@ func (v *view) extendPadding(p *ui.Painter, r ui.Rect, ox, oy, cw, ch float32) {
 		}
 		return x0, x1
 	}
-	for y := range v.lines {
-		line := &v.lines[y]
-		if !extends(line) || len(line.bgs) == 0 {
-			continue
+	sides := func() {
+		for y, line := range v.shownRows() {
+			if !extends(line) || len(line.bgs) == 0 {
+				continue
+			}
+			ry := oy + float32(y)*ch
+			if first := line.bgs[0]; first.x0 == 0 && !first.cursor && ox > left {
+				p.Fill(ui.Rect{X: left, Y: ry, W: ox - left, H: ch}, first.c, 0)
+			}
+			if last := line.bgs[len(line.bgs)-1]; last.x1 >= cols && !last.cursor && right > gx1 {
+				p.Fill(ui.Rect{X: gx1, Y: ry, W: right - gx1, H: ch}, last.c, 0)
+			}
 		}
-		ry := oy + float32(y)*ch
-		if first := line.bgs[0]; first.x0 == 0 && !first.cursor && ox > left {
-			p.Fill(ui.Rect{X: left, Y: ry, W: ox - left, H: ch}, first.c, 0)
-		}
-		if last := line.bgs[len(line.bgs)-1]; last.x1 >= cols && !last.cursor && right > gx1 {
-			p.Fill(ui.Rect{X: gx1, Y: ry, W: right - gx1, H: ch}, last.c, 0)
-		}
+	}
+	h := float32(len(v.lines)) * ch
+	if oy == top {
+		sides()
+	} else {
+		// Gliding rows show in the grid's rows alone, as drawRows draws them.
+		p.Clip(ui.Rect{X: r.X, Y: top, W: r.W, H: h}, 0, sides)
 	}
 	vertical := func(line *rowCache, y0, y1 float32) {
 		if y1 <= y0 || !extends(line) {
@@ -669,8 +696,26 @@ func (v *view) extendPadding(p *ui.Painter, r ui.Rect, ox, oy, cw, ch float32) {
 			p.Fill(ui.Rect{X: x0, Y: y0, W: x1 - x0, H: y1 - y0}, b.c, 0)
 		}
 	}
-	vertical(&v.lines[0], r.Y, oy)
-	vertical(&v.lines[len(v.lines)-1], oy+float32(len(v.lines))*ch, r.Y+r.H)
+	// The rows at the grid's edges, the viewport's own but while a glide
+	// moves the rows: the row the frame draws there, else the nearest.
+	edge := func(y int) *rowCache {
+		if line := v.shownRow(y); line != nil {
+			return line
+		}
+		return &v.lines[max(0, min(y, len(v.lines)-1))]
+	}
+	lag := v.lagPx()
+	vertical(edge(floorDiv(-lag, v.cellH)), r.Y, top)
+	vertical(edge(floorDiv(len(v.lines)*v.cellH-lag-1, v.cellH)), top+h, r.Y+r.H)
+}
+
+// floorDiv returns a/b rounded down, for b above zero.
+func floorDiv(a, b int) int {
+	q := a / b
+	if a%b != 0 && a < 0 {
+		q--
+	}
+	return q
 }
 
 // drawText draws the glyphs, drawn characters and lines of a row, in their

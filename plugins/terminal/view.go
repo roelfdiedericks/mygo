@@ -1,6 +1,7 @@
 package terminal
 
 import (
+	"iter"
 	"math"
 	"runtime"
 	"slices"
@@ -237,6 +238,7 @@ type view struct {
 	zoomed     float32 // wheel with the zoom modifier not yet a notch
 	scrollZoom bool    // a touchpad scroll gesture zooms, from how it began
 	ticking    bool    // an autoscroll tick is due
+	glide      glide   // the wheel's smooth scrolling
 
 	// reads are the program's reads of the clipboard waiting to be
 	// answered; clipPrompt is the one the terminal's own prompt asks
@@ -274,6 +276,7 @@ func (v *view) build(c *ui.Context, e ui.Element) {
 	dark := th.Dark
 	focused := e.Focused()
 	t.mu.Lock()
+	smooth := t.opts.SmoothScroll
 	theme := t.opts.Theme
 	if dark && t.opts.DarkTheme != nil {
 		theme = t.opts.DarkTheme
@@ -366,6 +369,7 @@ func (v *view) build(c *ui.Context, e ui.Element) {
 	if v.ticking {
 		c.After(40 * time.Millisecond)
 	}
+	v.glideFrame(c, smooth)
 }
 
 const blinkPeriod = 600 * time.Millisecond
@@ -544,7 +548,7 @@ func (v *view) caret() ui.Rect {
 	}
 	cw, ch := float32(v.cellW)/v.scale, float32(v.cellH)/v.scale
 	x := float32(v.ox)/v.scale + float32(v.caretCell[0])*cw
-	y := float32(v.oy)/v.scale + float32(v.caretCell[1])*ch
+	y := float32(v.oy)/v.scale + v.shift() + float32(v.caretCell[1])*ch
 	return ui.Rect{X: x, Y: y, W: cw, H: ch}
 }
 
@@ -1001,13 +1005,13 @@ func (v *view) selectAll() {
 }
 
 // cellAt returns the cell under a point of the element, in DIPs, within
-// the grid.
+// the grid, where the frame draws it while the view glides.
 func (v *view) cellAt(x, y float32) (col, row int) {
 	if v.cellW == 0 {
 		return 0, 0
 	}
 	col = int(math.Floor(float64((x*v.scale - float32(v.ox)) / float32(v.cellW))))
-	row = int(math.Floor(float64((y*v.scale - float32(v.oy)) / float32(v.cellH))))
+	row = int(math.Floor(float64((y*v.scale - float32(v.oy+v.lagPx())) / float32(v.cellH))))
 	return max(0, min(col, v.cols-1)), max(0, min(row, v.rows-1))
 }
 
@@ -1132,7 +1136,7 @@ func (t *Terminal) HoveredLink() (link string, path bool, at ui.Rect) {
 	h := v.hover
 	return v.hoverLink, v.hoverPath, ui.Rect{
 		X: float32(v.ox)/v.scale + float32(h.x0)*cw,
-		Y: float32(v.oy)/v.scale + float32(h.row)*ch,
+		Y: float32(v.oy)/v.scale + v.shift() + float32(h.row)*ch,
 		W: float32(h.x1-h.x0) * cw,
 		H: ch,
 	}
@@ -1152,7 +1156,7 @@ func (t *Terminal) CellRect(col, row int) (ui.Rect, bool) {
 		return ui.Rect{}, false
 	}
 	cw, ch := float32(v.cellW)/v.scale, float32(v.cellH)/v.scale
-	return ui.Rect{X: float32(v.ox)/v.scale + float32(col)*cw, Y: float32(v.oy)/v.scale + float32(row)*ch, W: cw, H: ch}, true
+	return ui.Rect{X: float32(v.ox)/v.scale + float32(col)*cw, Y: float32(v.oy)/v.scale + v.shift() + float32(row)*ch, W: cw, H: ch}, true
 }
 
 // AppPlacement is where the app placed one of its images
@@ -1170,8 +1174,10 @@ type AppPlacement struct {
 
 // AppPlacements returns the placements of the app's images, as of the
 // last paint: read it in the view function after View, and draw at each
-// Rect. A terminal no view shows, as a server's, reports where they are
-// now, in cells, with an empty Rect.
+// Rect. While a notch of the wheel glides the view (Options.SmoothScroll),
+// the rectangles move with the rows, frame by frame. A terminal no view
+// shows, as a server's, reports where they are now, in cells, with an
+// empty Rect.
 func (t *Terminal) AppPlacements() []AppPlacement {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -1193,7 +1199,7 @@ func (t *Terminal) AppPlacements() []AppPlacement {
 	cw, ch := float32(v.cellW)/v.scale, float32(v.cellH)/v.scale
 	out := make([]AppPlacement, 0, len(v.app))
 	for _, pl := range v.app {
-		out = append(out, appPlacement(pl, float32(v.ox)/v.scale, float32(v.oy)/v.scale, cw, ch))
+		out = append(out, appPlacement(pl, float32(v.ox)/v.scale, float32(v.oy)/v.scale+v.shift(), cw, ch))
 	}
 	return out
 }
@@ -1256,13 +1262,14 @@ func (t *Terminal) ScrollToBottom() bool { return t.scrollBack((*vt.Terminal).Sc
 // AtBottom reports whether the view shows the end of the terminal, its
 // screen, rather than the scrollback above it, as of the last paint, as
 // AppPlacements places the images: an app drawing at them knows whether
-// what follows them is in sight. A terminal no view shows reports where
-// it is now.
+// what follows them is in sight. While a notch of the wheel glides the
+// view (Options.SmoothScroll), it is not at the end until the glide
+// comes to rest there. A terminal no view shows reports where it is now.
 func (t *Terminal) AtBottom() bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if v := t.v; v != nil && v.scrollbar.Len > 0 {
-		return v.scrollbar.Offset+v.scrollbar.Len >= v.scrollbar.Total
+		return v.glide.lag == 0 && v.scrollbar.Offset+v.scrollbar.Len >= v.scrollbar.Total
 	}
 	return t.term == nil || t.term.AtBottom()
 }
@@ -1493,7 +1500,7 @@ func (v *view) scroll(ev ui.InputEvent) bool {
 	}
 	ch := float32(v.cellH) / v.scale
 	t.mu.Lock()
-	speed := t.opts.ScrollSpeed
+	speed, smooth := t.opts.ScrollSpeed, t.opts.SmoothScroll
 	t.mu.Unlock()
 	if speed <= 0 {
 		speed = 1
@@ -1560,7 +1567,13 @@ func (v *view) scroll(ev ui.InputEvent) bool {
 			t.in.push(append([]byte(nil), v.keys.Encode(vt.KeyEvent{Action: vt.KeyPress, Key: key})...))
 		}
 	default:
+		from := t.term.Scrollbar().Offset
 		t.term.ScrollBy(rows)
+		if smooth && !ev.Precise {
+			// A notch glides there: the paint finds the viewport moved
+			// as far as the notches asked, and the view lags it.
+			v.glide.rows += int(int64(t.term.Scrollbar().Offset) - int64(from))
+		}
 	}
 	return true
 }
@@ -1591,6 +1604,181 @@ func abs(v int) int {
 		return -v
 	}
 	return v
+}
+
+// glideTime is how long a notch of the wheel glides the view.
+const glideTime = 150 * time.Millisecond
+
+// glide is how the view slides to where the wheel's notches scrolled the
+// scrollback (Options.SmoothScroll): the terminal is there at once, in
+// whole rows, and the frame draws the rows lag device pixels below their
+// place (above it when negative), a lag that eases to nothing. The gap
+// the lag opens shows the rows that just left the viewport.
+type glide struct {
+	// rows is how far the notches since the last paint moved the
+	// viewport, which the paint turns into lag; a move of the viewport
+	// other than theirs snaps the view into place.
+	rows int
+	// from is the lag as the glide began, at at, and lag the frame's,
+	// eased from it at now, the frame's time.
+	from, lag float32
+	at, now   time.Time
+	// still tells that the view may not glide: the option is off, or the
+	// desktop asks for less motion.
+	still bool
+	// above and below are the rows that left the viewport by its top and
+	// by its bottom, which the gap shows: the last of above is the row
+	// above the viewport's first, the first of below the row below its
+	// last.
+	above, below []rowCache
+}
+
+// stop snaps the view into place.
+func (g *glide) stop() {
+	g.from, g.lag, g.above, g.below = 0, 0, nil, nil
+}
+
+// glideFrame eases the lag to the frame's time, and asks for the frames
+// the glide takes, which build the view, so that an app drawing at
+// AppPlacements follows the rows.
+func (v *view) glideFrame(c *ui.Context, smooth bool) {
+	g := &v.glide
+	g.now = c.Now()
+	g.still = !smooth || c.Preferences().ReduceMotion
+	if g.still {
+		g.stop()
+		return
+	}
+	if g.rows != 0 {
+		// This frame's paint begins the glide, which the next goes on with.
+		c.AnimationFrame()
+	}
+	if g.from == 0 {
+		return
+	}
+	f := float32(g.now.Sub(g.at)) / float32(glideTime)
+	if f >= 1 {
+		g.stop()
+		return
+	}
+	// Fast at first, slowing into place.
+	e := 1 - f
+	g.lag = g.from * e * e * e
+	c.AnimationFrame()
+}
+
+// glideMoved follows the viewport's move from prev to now, as the paint
+// finds it before it builds the rows again for rows rows: the notches'
+// move adds to the lag, up to a screen's height, and the rows that leave
+// the viewport go to the edge the gap opens at; any other move, a change
+// of the screen's size, or snap, puts the view in place at once. It
+// reports whether rows left the viewport's cache, which then builds all
+// its rows again.
+func (v *view) glideMoved(prev, now vt.Scrollbar, rows int, snap bool) bool {
+	g := &v.glide
+	wheel := g.rows
+	g.rows = 0
+	d := int(int64(now.Offset) - int64(prev.Offset))
+	resized := len(v.lines) != rows
+	switch {
+	case d == 0 && wheel == 0 && !snap && !resized:
+		return false
+	case d != wheel || snap || resized || g.still || v.cellH == 0:
+		g.stop()
+		return false
+	}
+	ch := v.cellH
+	span := float32(rows * ch)
+	lag := min(max(g.lag+float32(d*ch), -span), span)
+	if lag == 0 {
+		g.stop()
+		return false
+	}
+	need := int(math.Ceil(math.Abs(float64(lag)) / float64(ch)))
+	// The rows known, the viewport's and the edges', from the offset of
+	// the first: the gap's are those next to the new viewport.
+	strip := slices.Concat(g.above, v.lines, g.below)
+	first, above := int(prev.Offset)-len(g.above), len(g.above)
+	lo, hi := 0, 0
+	if lag > 0 {
+		hi = int(now.Offset) - first
+		lo = max(hi-need, 0)
+	} else {
+		lo = int(now.Offset) + rows - first
+		hi = min(lo+need, len(strip))
+	}
+	if lo < 0 || hi > len(strip) || lo > hi {
+		lo, hi = 0, 0 // the rows next to the viewport are not known
+	}
+	keep := slices.Clone(strip[lo:hi])
+	// The viewport's rows kept are the gap's now: its cache builds them
+	// again.
+	for i := lo; i < hi; i++ {
+		if y := i - above; y >= 0 && y < len(v.lines) {
+			v.lines[y] = rowCache{}
+		}
+	}
+	g.above, g.below = nil, nil
+	if lag > 0 {
+		g.above = keep
+	} else {
+		g.below = keep
+	}
+	g.from, g.lag, g.at = lag, lag, g.now
+	return true
+}
+
+// lagPx is how far below their place the frame draws the rows, in device
+// pixels: the glide's lag, at a whole pixel.
+func (v *view) lagPx() int { return int(math.Round(float64(v.glide.lag))) }
+
+// shift is lagPx in DIPs.
+func (v *view) shift() float32 {
+	if v.scale == 0 {
+		return 0
+	}
+	return float32(v.lagPx()) / v.scale
+}
+
+// shownRows yields the rows the frame draws, from the top, with their
+// rows from the viewport's top: the viewport's, and those a glide shows
+// beyond it.
+func (v *view) shownRows() iter.Seq2[int, *rowCache] {
+	return func(yield func(int, *rowCache) bool) {
+		g := &v.glide
+		for i := range g.above {
+			if !yield(i-len(g.above), &g.above[i]) {
+				return
+			}
+		}
+		for y := range v.lines {
+			if !yield(y, &v.lines[y]) {
+				return
+			}
+		}
+		for i := range g.below {
+			if !yield(len(v.lines)+i, &g.below[i]) {
+				return
+			}
+		}
+	}
+}
+
+// shownRow returns the row y rows from the viewport's top that the frame
+// draws, nil where it draws none.
+func (v *view) shownRow(y int) *rowCache {
+	g := &v.glide
+	switch {
+	case y < 0:
+		if i := len(g.above) + y; i >= 0 {
+			return &g.above[i]
+		}
+	case y < len(v.lines):
+		return &v.lines[y]
+	case y-len(v.lines) < len(g.below):
+		return &g.below[y-len(v.lines)]
+	}
+	return nil
 }
 
 // shiftedText returns what a key types with Shift on a US keyboard.
