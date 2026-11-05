@@ -201,6 +201,12 @@ term, err := terminal.New(terminal.Options{
   `background-opacity`, so that what is under the view shows through: the
   window's material, or an element's translucent background. Cells with a
   background color of their own still draw it.
+  `BackgroundOpacity` draws part of it instead, from 0 to 1, as Ghostty's
+  `background-opacity` does: a little of what is under the view shows
+  through the theme's background. Cells with a background color of their
+  own, and a background a program set (OSC 11), show whole.
+  `SetBackgroundOpacity` changes it in a running terminal, as a setting's
+  slider is dragged.
 - `Padding` is the room around the grid, in DIPs across (`X`) and down
   (`Y`), as Ghostty's `window-padding-x` and `window-padding-y`: 6 across
   and 4 down by default, none when negative. `PaddingColor` is what it

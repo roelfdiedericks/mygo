@@ -2984,6 +2984,48 @@ func TestTransparentProgramBackground(t *testing.T) {
 	}
 }
 
+// BackgroundOpacity draws that much of the theme's background over what
+// is under the view, and SetBackgroundOpacity changes it: none at 0, all
+// at 1; a background a program set still shows whole.
+func TestBackgroundOpacity(t *testing.T) {
+	loadLib(t)
+	theme := LightTheme()
+	term, err := New(Options{Conn: newPipe(), Theme: theme, BackgroundOpacity: 0.5})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer term.Close()
+	blue := ui.RGB(0, 0, 255)
+	tt := ui.NewTester(func(c *ui.Context) {
+		ui.Box(c).Fill().Background(blue).Children(func() { View(c, term).Fill() })
+	}, 400, 200)
+	at := func() ui.Color {
+		tt.Frame()
+		c := tt.Image().RGBAAt(int(300*term.v.scale), int(150*term.v.scale))
+		return ui.RGB(c.R, c.G, c.B)
+	}
+	close := func(a, b ui.Color) bool {
+		d := func(x, y uint8) int { return max(int(x)-int(y), int(y)-int(x)) }
+		return d(a.R, b.R) <= 2 && d(a.G, b.G) <= 2 && d(a.B, b.B) <= 2
+	}
+	if got, want := at(), theme.Background.Mix(blue, 0.5); !close(got, want) {
+		t.Errorf("at half: %v, want %v", got, want)
+	}
+	term.SetBackgroundOpacity(0)
+	if got := at(); got != blue {
+		t.Errorf("at 0: %v, want what is under the view, %v", got, blue)
+	}
+	term.SetBackgroundOpacity(1)
+	if got := at(); !close(got, theme.Background) {
+		t.Errorf("at 1: %v, want the theme's %v", got, theme.Background)
+	}
+	term.SetBackgroundOpacity(0.2)
+	term.Feed([]byte("\x1b]11;#ff0000\x07"))
+	if got := at(); got != ui.RGB(255, 0, 0) {
+		t.Errorf("a program's background at 0.2: %v, want it whole", got)
+	}
+}
+
 // Dropped files' paths are quoted for the program's shell, so that each
 // is one argument, whatever it holds: a newline does not end the command,
 // nor do PowerShell's $(…) or $var expand. Where the shells are installed,

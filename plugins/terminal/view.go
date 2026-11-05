@@ -150,6 +150,9 @@ type view struct {
 
 	theme   *Theme
 	applied *Theme // the theme the emulator has
+	// bgAlpha is how much of the theme's background the frame draws
+	// (Options.BackgroundOpacity).
+	bgAlpha float32
 
 	// The grid, in device pixels: the cells, the baseline in a cell, and
 	// the origin of the grid relative to the element; scale is device
