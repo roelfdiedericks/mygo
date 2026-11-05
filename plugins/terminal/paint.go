@@ -114,10 +114,11 @@ func (v *view) paint(p *ui.Painter, r ui.Rect) {
 	v.layout(r, p.Scale())
 	bg := v.theme.Background
 	t.mu.Lock()
+	v.bgAlpha = t.opts.bgAlpha()
 	if t.term == nil {
 		t.mu.Unlock()
-		if !t.opts.Transparent {
-			p.Fill(r, bg, 0)
+		if v.bgAlpha > 0 {
+			p.Fill(r, bg.Alpha(v.bgAlpha), 0)
 		}
 		return
 	}
@@ -500,10 +501,14 @@ func (v *view) draw(p *ui.Painter, r ui.Rect) {
 	top := (float32(math.Round(float64(r.Y*s))) + float32(v.oy)) / s
 	oy := top + v.shift()
 	base := float32(v.baseline) / s
-	// A transparent terminal still draws a background a program set (OSC
-	// 11), as Ghostty shows it.
-	if !v.t.opts.Transparent || v.colors.Background != rgb(v.theme.Background) {
-		p.Fill(r, color(v.colors.Background), 0)
+	// The theme's background, as much of it as the options say; a
+	// background a program set (OSC 11) shows whole, as Ghostty shows it.
+	a := v.bgAlpha
+	if v.colors.Background != rgb(v.theme.Background) {
+		a = 1
+	}
+	if a > 0 {
+		p.Fill(r, color(v.colors.Background).Alpha(a), 0)
 	}
 	if v.t.opts.PaddingColor != PaddingBackground {
 		v.extendPadding(p, r, ox, top, oy, cw, ch)
