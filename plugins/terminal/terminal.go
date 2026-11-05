@@ -151,6 +151,13 @@ type Options struct {
 	// primary, the selection clipboard of Linux, is not there: ui has
 	// none. SetCopyOnSelect changes it.
 	CopyOnSelect CopyOnSelect
+	// SmoothScroll glides the view to where a notch of the mouse wheel
+	// scrolls the scrollback, a row's pixels at a time, rather than
+	// jumping there; the terminal itself is there at once, in whole rows.
+	// A touchpad, which already scrolls as the fingers move, and the
+	// desktop asking for less motion scroll as without it.
+	// SetSmoothScroll changes it.
+	SmoothScroll bool
 	// NoCompression keeps the scrollback uncompressed. Otherwise, each
 	// time the terminal has been idle a moment, it compresses the
 	// scrollback out of sight, as Ghostty does, where the system lets it
@@ -1020,6 +1027,15 @@ func (t *Terminal) SetScrollMultiplier(m ScrollMultiplier) {
 	t.mu.Lock()
 	t.opts.ScrollMultiplier = m
 	t.mu.Unlock()
+}
+
+// SetSmoothScroll changes whether a notch of the wheel glides the view,
+// as Options.SmoothScroll, as when the user changes a setting.
+func (t *Terminal) SetSmoothScroll(on bool) {
+	t.mu.Lock()
+	t.opts.SmoothScroll = on
+	t.mu.Unlock()
+	t.redraw()
 }
 
 // SetCompression changes whether the terminal compresses its scrollback

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/egoist/mygo/plugins/terminal/internal/vt"
 	"github.com/egoist/mygo/ui"
@@ -272,7 +273,7 @@ func TestScrollFromAppElement(t *testing.T) {
 	if !term.AtBottom() {
 		t.Error("the painted view is not at the bottom")
 	}
-	tt.Wheel(100, 100, 0, -40) // a notch up: three rows
+	tt.Wheel(100, 100, 0, -hostNotch()) // a notch up: three rows
 	tt.Frame()
 	if got := offset(); got != before-3 {
 		t.Errorf("offset after a notch up over the app's element: %d, was %d", got, before)
@@ -319,5 +320,162 @@ func TestScrollbarUnderAppElement(t *testing.T) {
 	tt.Frame()
 	if shows() {
 		t.Error("the bar shows with the pointer off the view")
+	}
+}
+
+// glideTerm returns a terminal in a view with a scrollback, the app's
+// anchor and a blue image on one row of the screen, and a red last row;
+// with the anchor's row.
+func glideTerm(t *testing.T, smooth bool) (*Terminal, *ui.Tester, int) {
+	t.Helper()
+	loadLib(t)
+	term, err := New(Options{Conn: newPipe(), Theme: LightTheme(), SmoothScroll: smooth, AppImages: struct{ First, Last uint32 }{1000, 1999}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { term.Close() })
+	tt := ui.NewTester(func(c *ui.Context) { View(c, term).Fill() }, 400, 200)
+	tt.Frame()
+	_, rows := term.Size()
+	v := term.v
+	term.Feed([]byte(strings.Repeat("line\r\n", rows+20) +
+		"\x1b[11G" + kittyImage(7, v.cellW, v.cellH, ui.RGB(0, 0, 255), ",C=1") + "\r" + appAnchor(1000, 3, 1) +
+		strings.Repeat("\r\n", 5) + "\x1b[41m" + strings.Repeat(" ", 20) + "\x1b[0m"))
+	tt.Frame()
+	ps := term.AppPlacements()
+	if len(ps) != 1 || ps[0].Row < 0 || ps[0].Row+3 >= rows-1 {
+		t.Fatalf("rows %d, placements %+v", rows, ps)
+	}
+	return term, tt, ps[0].Row
+}
+
+// placedY returns where the app's placement shows, in DIPs.
+func placedY(t *testing.T, term *Terminal) float32 {
+	t.Helper()
+	ps := term.AppPlacements()
+	if len(ps) != 1 {
+		t.Fatalf("placements: %+v", ps)
+	}
+	return ps[0].Rect.Y
+}
+
+// rowY returns where row y of the viewport is at rest, in DIPs.
+func rowY(term *Terminal, y int) float32 {
+	v := term.v
+	return (float32(v.oy) + float32(y*v.cellH)) / v.scale
+}
+
+// pixel returns the color the view shows at cell col, row at rest.
+func pixel(tt *ui.Tester, term *Terminal, col, row int) ui.Color {
+	x, y := cellCenter(term, col, row)
+	img := tt.Image()
+	s := float32(img.Bounds().Dx()) / 400
+	c := img.RGBAAt(int(x*s), int(y*s))
+	return ui.RGB(c.R, c.G, c.B)
+}
+
+func near(a, b float32) bool { return a-b < 0.01 && b-a < 0.01 }
+
+// With SmoothScroll, a notch of the wheel scrolls the scrollback at once,
+// and the view glides there: the rows, the images, the rows that left the
+// viewport and the app's placements show where they were, then slide into
+// place. AtBottom waits for the glide to come to rest at the end.
+func TestSmoothScroll(t *testing.T) {
+	term, tt, row := glideTerm(t, true)
+	_, rows := term.Size()
+	offset := func() uint64 {
+		term.mu.Lock()
+		defer term.mu.Unlock()
+		return term.term.Scrollbar().Offset
+	}
+	bottom := offset()
+	blue := ui.RGB(0, 0, 255)
+	red := pixel(tt, term, 5, rows-1) // the theme's red, behind spaces
+	if pixel(tt, term, 10, row) != blue || red == LightTheme().Background {
+		t.Fatalf("before: image %v, last row %v", pixel(tt, term, 10, row), red)
+	}
+	at := placedY(t, term)
+	tt.Wheel(100, 100, 0, -hostNotch()) // a notch up: three rows
+	tt.Frame()
+	if got := offset(); got != bottom-3 {
+		t.Fatalf("offset after a notch up: %d, was %d", got, bottom)
+	}
+	if y := placedY(t, term); !near(y, at) {
+		t.Errorf("the placement jumped with the notch: at %v, was at %v", y, at)
+	}
+	if pixel(tt, term, 10, row) != blue || pixel(tt, term, 10, row+3) == blue {
+		t.Error("the image jumped with the notch")
+	}
+	// The last row left the viewport by its bottom; the gap shows it.
+	if c := pixel(tt, term, 5, rows-1); c != red {
+		t.Errorf("the gap shows %v, not the row that left", c)
+	}
+	if term.AtBottom() {
+		t.Error("at the bottom a notch up")
+	}
+	tt.Advance(50 * time.Millisecond)
+	if y := placedY(t, term); y <= at || y >= rowY(term, row+3) {
+		t.Errorf("halfway, the placement is at %v, from %v to %v", y, at, rowY(term, row+3))
+	}
+	tt.Advance(200 * time.Millisecond)
+	if y := placedY(t, term); !near(y, rowY(term, row+3)) {
+		t.Errorf("at rest, the placement is at %v, not %v", y, rowY(term, row+3))
+	}
+	if pixel(tt, term, 10, row+3) != blue || pixel(tt, term, 5, rows-1) == red {
+		t.Error("at rest, the image or the rows are not in place")
+	}
+	// Back down to the end: not there until the glide is.
+	tt.Wheel(100, 100, 0, hostNotch())
+	tt.Frame()
+	if offset() != bottom {
+		t.Fatalf("offset after a notch down: %d, want %d", offset(), bottom)
+	}
+	if term.AtBottom() {
+		t.Error("at the bottom as the glide begins")
+	}
+	tt.Advance(200 * time.Millisecond)
+	if !term.AtBottom() || !near(placedY(t, term), at) {
+		t.Errorf("at rest at the end: AtBottom %v, placement at %v, want %v", term.AtBottom(), placedY(t, term), at)
+	}
+}
+
+// Without SmoothScroll, as by default, and with SmoothScroll while the
+// desktop asks for less motion, a notch shows its rows in place at once.
+func TestSmoothScrollOff(t *testing.T) {
+	for _, still := range []bool{false, true} {
+		term, tt, row := glideTerm(t, still)
+		if still {
+			tt.SetPreferences(ui.Preferences{ReduceMotion: true, TextScale: 1})
+		}
+		tt.Wheel(100, 100, 0, -hostNotch())
+		tt.Frame()
+		if y := placedY(t, term); !near(y, rowY(term, row+3)) {
+			t.Errorf("smooth %v: after a notch, the placement is at %v, not %v", still, y, rowY(term, row+3))
+		}
+	}
+}
+
+// A move of the viewport the wheel did not make snaps a glide into
+// place: output following the end, and ScrollToBottom.
+func TestSmoothScrollSnaps(t *testing.T) {
+	term, tt, row := glideTerm(t, true)
+	tt.Wheel(100, 100, 0, -hostNotch())
+	tt.Advance(200 * time.Millisecond)
+	tt.Wheel(100, 100, 0, hostNotch())
+	tt.Frame()
+	if term.AtBottom() {
+		t.Fatal("at the bottom as the glide begins")
+	}
+	term.Feed([]byte("\r\nmore\r\nmore"))
+	tt.Frame()
+	if !term.AtBottom() || !near(placedY(t, term), rowY(term, row-2)) {
+		t.Errorf("after output: AtBottom %v, placement at %v, want %v", term.AtBottom(), placedY(t, term), rowY(term, row-2))
+	}
+	tt.Wheel(100, 100, 0, -hostNotch())
+	tt.Frame()
+	term.ScrollToBottom()
+	tt.Frame()
+	if !term.AtBottom() || !near(placedY(t, term), rowY(term, row-2)) {
+		t.Errorf("after ScrollToBottom: AtBottom %v, placement at %v, want %v", term.AtBottom(), placedY(t, term), rowY(term, row-2))
 	}
 }
