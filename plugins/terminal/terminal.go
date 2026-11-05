@@ -194,6 +194,12 @@ type Options struct {
 	// Give the theme the background the view shows on, which the text
 	// under a block cursor takes.
 	Transparent bool
+	// BackgroundOpacity is how much of the theme's background the view
+	// draws, from 0 to 1, over what is under it, as Ghostty's
+	// background-opacity: all of it when zero, none with Transparent.
+	// Cells with a background color of their own, and a background a
+	// program set, draw it whole. SetBackgroundOpacity changes it.
+	BackgroundOpacity float32
 	// Padding is the room around the grid, in DIPs, across (X) and down
 	// (Y), as Ghostty's window-padding-x and window-padding-y: 6 across
 	// and 4 down when zero; a negative value leaves none.
@@ -1463,6 +1469,30 @@ func (t *Terminal) renderHold(held bool) {
 	}
 	t.held = held
 	t.rmu.Unlock()
+}
+
+// SetBackgroundOpacity changes how much of the theme's background the
+// view draws, as Options.BackgroundOpacity, as when the user drags a
+// setting: none at 0, as Transparent.
+func (t *Terminal) SetBackgroundOpacity(opacity float32) {
+	t.mu.Lock()
+	t.opts.Transparent = opacity <= 0
+	t.opts.BackgroundOpacity = opacity
+	t.mu.Unlock()
+	t.redraw()
+}
+
+// bgAlpha is how much of the theme's background the view draws: none
+// when Transparent, BackgroundOpacity's share, all when that is unset.
+// t.mu held.
+func (o *Options) bgAlpha() float32 {
+	switch {
+	case o.Transparent:
+		return 0
+	case o.BackgroundOpacity <= 0:
+		return 1
+	}
+	return min(o.BackgroundOpacity, 1)
 }
 
 // redraw asks the view for a frame.
