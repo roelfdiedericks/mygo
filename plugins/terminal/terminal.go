@@ -146,6 +146,12 @@ type Options struct {
 	// the terminal: 1 (as 0) scrolls a notch by the lines the system says,
 	// a touchpad as far as the fingers move. SetScrollSpeed changes it.
 	ScrollSpeed float32
+	// NoCompression keeps the scrollback uncompressed. Otherwise, each
+	// time the terminal has been idle a moment, it compresses the
+	// scrollback out of sight, as Ghostty does, where the system lets it
+	// (macOS and 64-bit Linux): 70 to 90 per cent less memory for text.
+	// SetCompression changes it.
+	NoCompression bool
 	// Keybinds bind keys to actions over DefaultKeybinds, as Ghostty's
 	// keybind option: a binding replaces the defaults of its key and
 	// modifiers, and one to ActionNone unbinds them, so that the program
@@ -636,6 +642,7 @@ func New(opts Options) (*Terminal, error) {
 	// Programs asking the colors before a view shows the terminal, or in
 	// one no view shows, get the theme asked for.
 	t.UseTheme(opts.Theme)
+	go t.compressIdle()
 	if opts.Conn != nil {
 		t.src = opts.Conn
 		t.quoting = quotingFor(runtime.GOOS, "")
@@ -644,8 +651,12 @@ func New(opts Options) (*Terminal, error) {
 	}
 	path, args, err := command(opts.Command)
 	if err != nil {
+		// The compressor sees no emulator, and ends.
+		t.mu.Lock()
 		t.rs.Free()
 		t.term.Free()
+		t.term = nil
+		t.mu.Unlock()
 		return nil, err
 	}
 	t.quoting = quotingFor(runtime.GOOS, path)
@@ -942,6 +953,66 @@ func (t *Terminal) SetScrollSpeed(speed float32) {
 	t.mu.Lock()
 	t.opts.ScrollSpeed = speed
 	t.mu.Unlock()
+}
+
+// SetCompression changes whether the terminal compresses its scrollback
+// when idle, as Options.NoCompression, as when the user changes a
+// setting. Compressed scrollback stays so until it is read.
+func (t *Terminal) SetCompression(on bool) {
+	t.mu.Lock()
+	t.opts.NoCompression = !on
+	t.mu.Unlock()
+}
+
+// compressAfter is how long a terminal is idle before it compresses its
+// scrollback, Ghostty's.
+const compressAfter = 250 * time.Millisecond
+
+// compressIdle compresses the scrollback once the terminal has been idle
+// compressAfter, until it is all compressed, a bounded step at a time
+// under the lock, so that output and frames wait little; again after the
+// next activity. It ends with the terminal, or at once where the system
+// cannot compress.
+func (t *Terminal) compressIdle() {
+	tick := time.NewTicker(compressAfter)
+	defer tick.Stop()
+	var last uint64
+	done := false
+	for range tick.C {
+		t.mu.Lock()
+		if t.term == nil {
+			t.mu.Unlock()
+			return
+		}
+		act, off := t.term.Activity(), t.opts.NoCompression
+		t.mu.Unlock()
+		if act != last {
+			last, done = act, false
+			continue
+		}
+		if done || off {
+			continue
+		}
+		for {
+			t.mu.Lock()
+			if t.term == nil {
+				t.mu.Unlock()
+				return
+			}
+			r := t.term.Compress()
+			if r != vt.CompressionPending {
+				last = t.term.Activity()
+			}
+			t.mu.Unlock()
+			if r == vt.CompressionUnsupported {
+				return
+			}
+			if r != vt.CompressionPending {
+				done = true
+				break
+			}
+		}
+	}
 }
 
 // SetMinimumContrast changes the least contrast of text with its
