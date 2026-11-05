@@ -1959,6 +1959,48 @@ func TestOnZoom(t *testing.T) {
 	}
 }
 
+// A notch scrolls the lines the system says (Windows' lines a notch,
+// counted once), or three a 40-DIP notch where it does not say; the
+// scroll speed multiplies that and a touchpad's distance.
+func TestWheelLinesAndSpeed(t *testing.T) {
+	loadLib(t)
+	var scrolls []int
+	term, err := New(Options{
+		Conn:     newPipe(),
+		OnScroll: func(rows int) bool { scrolls = append(scrolls, rows); return true },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer term.Close()
+	tt := ui.NewTester(func(c *ui.Context) { View(c, term).Fill().AutoFocus() }, 400, 200)
+	tt.Frame()
+	ch := float32(term.v.cellH) / term.v.scale
+	for _, c := range []struct {
+		name  string
+		speed float32
+		ev    ui.InputEvent
+		want  int
+	}{
+		// Windows at its default of 3 lines a notch sends 99 DIPs: three
+		// rows, not the seven that 99 DIPs made by the 40-DIP rule.
+		{"a Windows notch", 0, ui.InputEvent{DY: -99, Lines: -3}, -3},
+		{"a notch of 5 lines", 0, ui.InputEvent{DY: 165, Lines: 5}, 5},
+		{"a notch the system does not count", 0, ui.InputEvent{DY: -40}, -3},
+		{"a notch at 200%", 2, ui.InputEvent{DY: -99, Lines: -3}, -6},
+		{"a notch at 50%", 0.5, ui.InputEvent{DY: 66, Lines: 2}, 1},
+		{"a touchpad's four rows at 150%", 1.5, ui.InputEvent{DY: 4 * ch, Precise: true}, 6},
+	} {
+		scrolls = nil
+		term.SetScrollSpeed(c.speed)
+		c.ev.Kind = ui.InputScroll
+		term.v.scroll(c.ev)
+		if !slices.Equal(scrolls, []int{c.want}) {
+			t.Errorf("%s scrolled %v, want [%d]", c.name, scrolls, c.want)
+		}
+	}
+}
+
 // A touchpad scroll that began without Command keeps scrolling, even after
 // the fingers leave it and Command comes down while its momentum runs.
 func TestOnZoomIgnoresMomentum(t *testing.T) {

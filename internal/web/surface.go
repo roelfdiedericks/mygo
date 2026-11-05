@@ -190,8 +190,12 @@ func (s *surface) listen() {
 		x, y := s.point(e)
 		dx, dy := e.Get("deltaX").Float(), e.Get("deltaY").Float()
 		precise := true
+		// The lines a wheel scrolls: the browser's, by the system's
+		// setting, or three a notch.
+		var lines float64
 		switch e.Get("deltaMode").Int() {
 		case 1: // lines
+			lines = dy
 			dx, dy, precise = dx*lineHeight, dy*lineHeight, false
 		case 2: // pages
 			dx, dy, precise = dx*s.width, dy*s.height, false
@@ -199,6 +203,7 @@ func (s *surface) listen() {
 			// A wheel's notches, which browsers give as pixels too.
 			if w := e.Get("wheelDeltaY"); w.Type() == js.TypeNumber && w.Int() != 0 && w.Int()%120 == 0 {
 				precise = false
+				lines = -float64(w.Int()) / 120 * 3
 			}
 		}
 		if precise && e.Get("ctrlKey").Bool() {
@@ -209,7 +214,7 @@ func (s *surface) listen() {
 			s.send(platform.SurfaceEvent{Kind: platform.PointerZoom, X: x, Y: y, Scale: math.Exp(-dy / 100), Mods: s.mods(e)})
 			return
 		}
-		s.send(platform.SurfaceEvent{Kind: platform.PointerScroll, X: x, Y: y, DX: dx, DY: dy, Precise: precise, Mods: s.mods(e)})
+		s.send(platform.SurfaceEvent{Kind: platform.PointerScroll, X: x, Y: y, DX: dx, DY: dy, Precise: precise, Lines: lines, Mods: s.mods(e)})
 	})
 	// Safari sends pinches as gesture events instead, whose scale is from
 	// 1 as the pinch began; without preventDefault it zooms the page.

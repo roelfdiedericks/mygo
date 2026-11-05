@@ -790,12 +790,13 @@ func initSurfaceCallbacks() {
 			return false
 		}
 		ev := platform.SurfaceEvent{Kind: platform.PointerScroll, X: field[float64](event, 24), Y: field[float64](event, 32), Mods: gdkMods(field[uint32](event, 40))}
-		const step = 50
+		// A notch is three lines, as Ghostty scrolls GTK's discrete steps.
+		const step, notchLines = 50, 3
 		switch field[int32](event, 44) {
 		case 0:
-			ev.DY = -step
+			ev.DY, ev.Lines = -step, -notchLines
 		case 1:
-			ev.DY = step
+			ev.DY, ev.Lines = step, notchLines
 		case 2:
 			ev.DX = -step
 		case 3:
@@ -804,6 +805,9 @@ func initSurfaceCallbacks() {
 			dx, dy := field[float64](event, 72), field[float64](event, 80)
 			ev.DX, ev.DY = dx*step, dy*step
 			ev.Precise = dx != float64(int64(dx)) || dy != float64(int64(dy))
+			if !ev.Precise {
+				ev.Lines = dy * notchLines
+			}
 		}
 		s.send(ev)
 		return true

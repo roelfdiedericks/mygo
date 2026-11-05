@@ -1492,10 +1492,23 @@ func (v *view) scroll(ev ui.InputEvent) bool {
 		return true
 	}
 	ch := float32(v.cellH) / v.scale
+	t.mu.Lock()
+	speed := t.opts.ScrollSpeed
+	t.mu.Unlock()
+	if speed <= 0 {
+		speed = 1
+	}
 	dy := ev.DY
 	if !ev.Precise {
-		dy = dy / 40 * 3 * ch // a notch scrolls three rows
+		// A notch scrolls the lines the system says, as rows; where it
+		// does not say, three a 40-DIP notch.
+		lines := ev.Lines
+		if lines == 0 {
+			lines = dy / 40 * 3
+		}
+		dy = lines * ch
 	}
+	dy *= speed
 	v.scrolled += dy
 	rows := int(v.scrolled / ch)
 	v.scrolled -= float32(rows) * ch

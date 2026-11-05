@@ -75,10 +75,14 @@ type InputEvent struct {
 	Button int
 	Clicks int
 	// DX and DY are what InputScroll scrolls by, in local axes; positive DY moves the view
-	// down the content.
+	// down the content. Lines is how many lines a mouse wheel's notches
+	// scroll down as the system counts them, for content that scrolls by
+	// lines, as a terminal; 0 for a touchpad, or where the system does
+	// not say.
 	DX, DY   float32
 	Precise  bool
 	Momentum bool
+	Lines    float32
 	// Scale is what InputZoom zooms by.
 	Scale float32
 	// Start and End are the runes InputSelect selects.

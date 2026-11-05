@@ -296,9 +296,15 @@ type SurfaceEvent struct {
 	// DX and DY are scroll distances in DIPs; Precise marks touchpads and
 	// other devices that scroll by pixels rather than by lines. Momentum
 	// marks scrolling that continues after the fingers leave a touchpad.
+	// Lines is how many lines a mouse wheel's notches scroll down (up when
+	// negative) as the system counts them, for content that scrolls by
+	// lines, as a terminal does: Windows' lines a notch, three a line of
+	// macOS's delta or a notch of GTK's, as Ghostty scrolls; 0 for precise
+	// scrolling, sideways or where the backend does not say.
 	DX, DY   float64
 	Precise  bool
 	Momentum bool
+	Lines    float64
 	// Scale is PointerZoom's.
 	Scale float64
 	Key   Key

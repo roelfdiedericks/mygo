@@ -617,10 +617,14 @@ func (s *surface) message(hwnd uintptr, m uint32, wp, lp uintptr) (uintptr, bool
 			s.send(platform.SurfaceEvent{Kind: platform.PointerZoom, X: s.toDIP(pt.X), Y: s.toDIP(pt.Y), Scale: math.Exp(delta / 120 * math.Ln2 / 3), Mods: mods()})
 			return 0, true
 		}
-		dist := delta / 120 * float64(wheelLines()) * 33
+		lines := delta / 120 * float64(wheelLines())
+		dist := lines * 33
 		ev := platform.SurfaceEvent{Kind: platform.PointerScroll, X: s.toDIP(pt.X), Y: s.toDIP(pt.Y), Mods: mods(), Precise: precise}
 		if m == wmMouseWheel {
 			ev.DY = -dist
+			if !precise {
+				ev.Lines = -lines
+			}
 		} else {
 			ev.DX = dist
 		}

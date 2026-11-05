@@ -142,6 +142,10 @@ type Options struct {
 	// primary, the selection clipboard of Linux, is not there: ui has
 	// none. SetCopyOnSelect changes it.
 	CopyOnSelect CopyOnSelect
+	// ScrollSpeed multiplies how far the mouse wheel and a touchpad scroll
+	// the terminal: 1 (as 0) scrolls a notch by the lines the system says,
+	// a touchpad as far as the fingers move. SetScrollSpeed changes it.
+	ScrollSpeed float32
 	// Keybinds bind keys to actions over DefaultKeybinds, as Ghostty's
 	// keybind option: a binding replaces the defaults of its key and
 	// modifiers, and one to ActionNone unbinds them, so that the program
@@ -929,6 +933,14 @@ func (t *Terminal) zoom(z Zoom) {
 func (t *Terminal) SetCopyOnSelect(c CopyOnSelect) {
 	t.mu.Lock()
 	t.opts.CopyOnSelect = c
+	t.mu.Unlock()
+}
+
+// SetScrollSpeed changes how far the wheel and a touchpad scroll the
+// terminal, as Options.ScrollSpeed, as when the user changes a setting.
+func (t *Terminal) SetScrollSpeed(speed float32) {
+	t.mu.Lock()
+	t.opts.ScrollSpeed = speed
 	t.mu.Unlock()
 }
 

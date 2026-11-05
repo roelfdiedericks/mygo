@@ -899,11 +899,15 @@ func registerSurfaceClass() {
 			dx, dy := msgFloat(ev, sel("scrollingDeltaX")), msgFloat(ev, sel("scrollingDeltaY"))
 			precise := sendBool(ev, "hasPreciseScrollingDeltas")
 			momentum := sendInt(ev, "momentumPhase") != 0
+			var lines float64
 			if !precise {
-				// A mouse wheel scrolls by lines: 40 DIPs, as in browsers.
+				// A mouse wheel scrolls by lines: 40 DIPs, as in browsers,
+				// and three rows of a terminal, as Ghostty's discrete
+				// scrolling multiplies them.
+				lines = -dy * 3
 				dx, dy = dx*40, dy*40
 			}
-			s.send(platform.SurfaceEvent{Kind: platform.PointerScroll, X: x, Y: y, DX: -dx, DY: -dy, Precise: precise, Momentum: momentum, Mods: eventMods(ev)})
+			s.send(platform.SurfaceEvent{Kind: platform.PointerScroll, X: x, Y: y, DX: -dx, DY: -dy, Precise: precise, Momentum: momentum, Lines: lines, Mods: eventMods(ev)})
 		}),
 		method("magnifyWithEvent:", func(self id, _ objc.SEL, ev id) {
 			s := b().surfaceOf(self)
