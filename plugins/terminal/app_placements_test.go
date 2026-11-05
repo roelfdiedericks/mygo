@@ -199,7 +199,7 @@ func TestAppPlacementsPruned(t *testing.T) {
 }
 
 // ScrollRows, ScrollToTop and ScrollToBottom scroll the scrollback from
-// code; a full-screen program's screen has none.
+// code; a full-screen program's screen has none. AtBottom follows them.
 func TestScrollRows(t *testing.T) {
 	loadLib(t)
 	term, err := New(Options{Conn: newPipe()})
@@ -215,14 +215,23 @@ func TestScrollRows(t *testing.T) {
 		return term.term.Scrollbar().Offset
 	}
 	bottom := offset()
+	if !term.AtBottom() {
+		t.Error("not at the bottom after output")
+	}
 	if !term.ScrollRows(-5) || offset() != bottom-5 {
 		t.Errorf("5 rows up: offset %d, bottom %d", offset(), bottom)
+	}
+	if term.AtBottom() {
+		t.Error("at the bottom 5 rows up")
 	}
 	if !term.ScrollToTop() || offset() != 0 {
 		t.Errorf("to the top: offset %d", offset())
 	}
 	if !term.ScrollToBottom() || offset() != bottom {
 		t.Errorf("to the bottom: offset %d, want %d", offset(), bottom)
+	}
+	if !term.AtBottom() {
+		t.Error("not at the bottom after ScrollToBottom")
 	}
 	term.Feed([]byte("\x1b[?1049h"))
 	if term.ScrollRows(-5) || term.ScrollToTop() {
@@ -260,10 +269,16 @@ func TestScrollFromAppElement(t *testing.T) {
 	if before == 0 {
 		t.Fatal("no scrollback to scroll")
 	}
+	if !term.AtBottom() {
+		t.Error("the painted view is not at the bottom")
+	}
 	tt.Wheel(100, 100, 0, -40) // a notch up: three rows
 	tt.Frame()
 	if got := offset(); got != before-3 {
 		t.Errorf("offset after a notch up over the app's element: %d, was %d", got, before)
+	}
+	if term.AtBottom() {
+		t.Error("the painted view is at the bottom a notch up")
 	}
 	if term.Scroll(ui.InputEvent{Kind: ui.InputPointerDown}) {
 		t.Error("a pointer event was taken")

@@ -1253,6 +1253,20 @@ func (t *Terminal) ScrollToTop() bool { return t.scrollBack((*vt.Terminal).Scrol
 
 func (t *Terminal) ScrollToBottom() bool { return t.scrollBack((*vt.Terminal).ScrollToBottom) }
 
+// AtBottom reports whether the view shows the end of the terminal, its
+// screen, rather than the scrollback above it, as of the last paint, as
+// AppPlacements places the images: an app drawing at them knows whether
+// what follows them is in sight. A terminal no view shows reports where
+// it is now.
+func (t *Terminal) AtBottom() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if v := t.v; v != nil && v.scrollbar.Len > 0 {
+		return v.scrollbar.Offset+v.scrollbar.Len >= v.scrollbar.Total
+	}
+	return t.term == nil || t.term.AtBottom()
+}
+
 // scrollBack scrolls the scrollback with fn, but for a full-screen
 // program's screen, and reports whether it did.
 func (t *Terminal) scrollBack(fn func(*vt.Terminal)) bool {
