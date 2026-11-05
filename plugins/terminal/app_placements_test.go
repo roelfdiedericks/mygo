@@ -323,10 +323,10 @@ func TestScrollbarUnderAppElement(t *testing.T) {
 	}
 }
 
-// glideTerm returns a terminal in a view with a scrollback, the app's
-// anchor and a blue image on one row of the screen, and a red last row;
-// with the anchor's row.
-func glideTerm(t *testing.T, smooth bool) (*Terminal, *ui.Tester, int) {
+// glideTerm returns a terminal in a view at scale device pixels a DIP,
+// with a scrollback, the app's anchor and a blue image on one row of the
+// screen, and a red last row; with the anchor's row.
+func glideTerm(t *testing.T, smooth bool, scale float32) (*Terminal, *ui.Tester, int) {
 	t.Helper()
 	loadLib(t)
 	term, err := New(Options{Conn: newPipe(), Theme: LightTheme(), SmoothScroll: smooth, AppImages: struct{ First, Last uint32 }{1000, 1999}})
@@ -335,6 +335,7 @@ func glideTerm(t *testing.T, smooth bool) (*Terminal, *ui.Tester, int) {
 	}
 	t.Cleanup(func() { term.Close() })
 	tt := ui.NewTester(func(c *ui.Context) { View(c, term).Fill() }, 400, 200)
+	tt.SetScale(scale)
 	tt.Frame()
 	_, rows := term.Size()
 	v := term.v
@@ -379,9 +380,17 @@ func near(a, b float32) bool { return a-b < 0.01 && b-a < 0.01 }
 // With SmoothScroll, a notch of the wheel scrolls the scrollback at once,
 // and the view glides there: the rows, the images, the rows that left the
 // viewport and the app's placements show where they were, then slide into
-// place. AtBottom waits for the glide to come to rest at the end.
+// place. AtBottom waits for the glide to come to rest at the end. At 1, 1.5
+// (Windows at 150 per cent) and 2 (Retina) device pixels a DIP, as the
+// lag is drawn at whole device pixels.
 func TestSmoothScroll(t *testing.T) {
-	term, tt, row := glideTerm(t, true)
+	for _, scale := range []float32{1, 1.5, 2} {
+		t.Run(fmt.Sprintf("scale %v", scale), func(t *testing.T) { smoothScrollAt(t, scale) })
+	}
+}
+
+func smoothScrollAt(t *testing.T, scale float32) {
+	term, tt, row := glideTerm(t, true, scale)
 	_, rows := term.Size()
 	offset := func() uint64 {
 		term.mu.Lock()
@@ -443,7 +452,7 @@ func TestSmoothScroll(t *testing.T) {
 // desktop asks for less motion, a notch shows its rows in place at once.
 func TestSmoothScrollOff(t *testing.T) {
 	for _, still := range []bool{false, true} {
-		term, tt, row := glideTerm(t, still)
+		term, tt, row := glideTerm(t, still, 1)
 		if still {
 			tt.SetPreferences(ui.Preferences{ReduceMotion: true, TextScale: 1})
 		}
@@ -458,7 +467,7 @@ func TestSmoothScrollOff(t *testing.T) {
 // A move of the viewport the wheel did not make snaps a glide into
 // place: output following the end, and ScrollToBottom.
 func TestSmoothScrollSnaps(t *testing.T) {
-	term, tt, row := glideTerm(t, true)
+	term, tt, row := glideTerm(t, true, 1)
 	tt.Wheel(100, 100, 0, -hostNotch())
 	tt.Advance(200 * time.Millisecond)
 	tt.Wheel(100, 100, 0, hostNotch())
