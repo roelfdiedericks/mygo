@@ -3187,3 +3187,49 @@ func TestOnDrop(t *testing.T) {
 		t.Errorf("a drop OnDrop left pasted %q", s)
 	}
 }
+
+// A terminal compresses its scrollback once it has been idle, where the
+// system can (macOS and 64-bit Linux), and not with NoCompression.
+func TestCompressWhenIdle(t *testing.T) {
+	loadLib(t)
+	var b strings.Builder
+	for i := range 30000 {
+		fmt.Fprintf(&b, "line %d of the output of some command\r\n", i)
+	}
+	for _, off := range []bool{false, true} {
+		term, err := New(Options{Conn: newPipe(), ScrollbackLines: 100000, NoCompression: off})
+		if err != nil {
+			t.Fatal(err)
+		}
+		term.ResizePixels(80, 24, 8, 16)
+		term.Feed([]byte(b.String()))
+		usage := func() vt.MemoryUsage {
+			term.mu.Lock()
+			defer term.mu.Unlock()
+			return term.term.MemoryUsage()
+		}
+		u := usage()
+		if u.PrimaryPages == 0 || u.PrimaryResident == 0 {
+			t.Fatalf("memory usage read nothing: %+v", u)
+		}
+		if !u.CompressionSupported {
+			term.Close()
+			t.Skip("this system cannot compress scrollback")
+		}
+		wait := 5 * time.Second
+		if off {
+			wait = time.Second
+		}
+		for deadline := time.Now().Add(wait); usage().PrimaryCompressedPages == 0 && time.Now().Before(deadline); {
+			time.Sleep(50 * time.Millisecond)
+		}
+		u = usage()
+		switch {
+		case off && u.PrimaryCompressedPages != 0:
+			t.Errorf("compressed %d pages with NoCompression", u.PrimaryCompressedPages)
+		case !off && (u.PrimaryCompressedPages == 0 || u.PrimaryResident >= u.PrimaryVirtual):
+			t.Errorf("idle scrollback not compressed: %+v", u)
+		}
+		term.Close()
+	}
+}
