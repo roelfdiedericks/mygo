@@ -454,7 +454,7 @@ func TestLayoutInputs(t *testing.T) {
 		"inputFn textClient caret takesText noIME copyData webView maximizeButton fit gray dismissed rotate label widget role " +
 		"checked expanded vertical tip highlighted accValue accRange hasRange accFill accStep barInset scrollBase " +
 		"listRow rowIndex rowsOf focusGroup groupSelects segment activeDescendant nameFrom nameJoin " +
-		"setPos setSize choosesItems search description invalid followX sort level expandable " +
+		"setPos setSize choosesItems search description invalid followX anchorTop anchorY scrollAnchor sort level expandable " +
 		"chooseMany serial"
 	known := map[string]bool{}
 	for _, f := range strings.Fields(read + " " + other) {

@@ -570,6 +570,90 @@ func TestPopoverScrollsWithItsAnchor(t *testing.T) {
 	}
 }
 
+// TestAnchorTop keeps the descendant marked ScrollAnchor where AnchorTop
+// puts it while what is above it changes height, the element moving
+// instead: in a frame that lays it out again, in one whose layout the
+// cache reuses whole, and when only the mark moves. Without a mark, the
+// element's insets place it.
+func TestAnchorTop(t *testing.T) {
+	above, mark := float32(50), "b"
+	tt := coreNewTester(func(c *context) {
+		coreColumn(c).Absolute().Left(0).Right(0).Top(10).AnchorTop(200).Label("content").Gap(8).Children(func() {
+			coreBox(c).Height(above).Label("a")
+			coreColumn(c).Padding(6, 0, 0, 0).Children(func() {
+				if b := coreBox(c).Height(30).Label("b"); mark == "b" {
+					b.ScrollAnchor()
+				}
+			})
+			if e := coreBox(c).Height(40).Label("c"); mark == "c" {
+				e.ScrollAnchor()
+			}
+		})
+	}, 300, 400)
+	at := func(label string) float32 {
+		t.Helper()
+		r, ok := tt.Find(label)
+		if !ok {
+			t.Fatalf("no %s", label)
+		}
+		return r.Y
+	}
+	// Find gives what shows of a box, so each one checked is in the window.
+	if at("b") != 200 || at("content") != 136 {
+		t.Fatalf("b at %v, the content at %v; want 200 and 136", at("b"), at("content"))
+	}
+	above = 120
+	tt.Frame()
+	if at("b") != 200 || at("a") != 66 {
+		t.Errorf("a taller: b at %v, a at %v; want 200 and 66", at("b"), at("a"))
+	}
+	tt.Frame()
+	if at("b") != 200 {
+		t.Errorf("a frame the same: b at %v, want 200", at("b"))
+	}
+	mark = "c"
+	tt.Frame()
+	if at("c") != 200 || at("content") != 28 {
+		t.Errorf("the mark on c: c at %v, the content at %v; want 200 and 28", at("c"), at("content"))
+	}
+	mark = ""
+	tt.Frame()
+	if at("content") != 10 {
+		t.Errorf("no mark: the content at %v, want 10", at("content"))
+	}
+}
+
+// TestAnchorTopLeavesOut places an element with AnchorTop by its insets
+// when its marked descendant is hidden, in a container that scrolls
+// vertically, in another element with AnchorTop, or in a popover.
+func TestAnchorTopLeavesOut(t *testing.T) {
+	for _, where := range []string{"hidden", "scroller", "anchored", "popover"} {
+		open := true
+		tt := coreNewTester(func(c *context) {
+			coreColumn(c).Absolute().Left(0).Right(0).Top(100).AnchorTop(300).Label("content").Children(func() {
+				coreBox(c).Height(50)
+				marked := func() { coreBox(c).Height(30).ScrollAnchor().Hidden(where == "hidden") }
+				switch where {
+				case "scroller":
+					coreScroll(c).Height(30).Children(marked)
+				case "anchored":
+					coreBox(c).Height(30).Children(func() {
+						coreColumn(c).Absolute().Left(0).Right(0).AnchorTop(0).Children(marked)
+					})
+				case "popover":
+					b := coreButtonBase(c).Size(60, 20).Label("button")
+					corePopoverBase(c, b, &open, func(panel *node) { marked() })
+				default:
+					marked()
+				}
+			})
+		}, 300, 400)
+		if r, _ := tt.Find("content"); r.Y != 100 {
+			t.Errorf("marked %s: the content at %v, want 100", where, r.Y)
+		}
+	}
+}
+
 // TestEscapeClosesTheInnerPopover opens a popover in a popover, whose
 // Escape registers after the inner one's: Escape closes the inner first.
 func TestEscapeClosesTheInnerPopover(t *testing.T) {

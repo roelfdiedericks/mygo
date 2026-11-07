@@ -159,11 +159,48 @@ func place(e *node, x, y float32) {
 	for ch := e.first; ch != nil; ch = ch.next {
 		// A copy of an element leaving the flow stays where the flow was.
 		if ch.flags&flagAbsolute != 0 && ch.leaving != 1 {
-			place(ch, e.x, e.y)
+			oy := e.y
+			if off, ok := ch.anchorOffset(); ok {
+				// Its marked descendant's top anchorY below the padding
+				// box's (AnchorTop), whatever its insets said.
+				oy += e.border[0] + ch.anchorY - off - ch.y
+			}
+			place(ch, e.x, oy)
 		} else {
 			place(ch, cx, cy)
 		}
 	}
+}
+
+// anchorOffset returns how far below the top of an absolute element with
+// AnchorTop its layout put the descendant marked ScrollAnchor, and whether
+// one is laid out. The boxes inside are still relative to their parents
+// here: the offset is their sum on the way down to it.
+func (e *node) anchorOffset() (float32, bool) {
+	if !e.anchorTop || e.leaving != 0 {
+		return 0, false
+	}
+	return scrollAnchorIn(e)
+}
+
+// scrollAnchorIn returns how far below e's top its first descendant
+// marked ScrollAnchor is, leaving out those hidden, collapsed or leaving,
+// and what is in a container that scrolls vertically or in another
+// element with AnchorTop.
+func scrollAnchorIn(e *node) (float32, bool) {
+	for c := e.first; c != nil; c = c.next {
+		switch {
+		case c.hidden || c.collapsed || c.leaving != 0:
+		case c.scrollAnchor:
+			return c.y, true
+		case c.anchorTop || c.flags&flagScrollY != 0:
+		default:
+			if y, ok := scrollAnchorIn(c); ok {
+				return c.y + y, true
+			}
+		}
+	}
+	return 0, false
 }
 
 // relative returns how far the insets of an element in flow move it from

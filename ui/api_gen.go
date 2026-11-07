@@ -2633,6 +2633,26 @@ func (_handle Element) AlignSelf(a Align) Element {
 	return wrapElement(_node.AlignSelf(a))
 }
 
+// AnchorTop places an Absolute element by its descendant marked with
+// ScrollAnchor rather than by its insets: the element goes where that
+// descendant's top is y DIPs below the top of the parent's padding box,
+// wherever the element's layout puts the descendant, so that what grows
+// or shrinks above the descendant moves the element, and what is read
+// there stays in place, as a browser's scroll anchoring keeps it. Without
+// a marked descendant laid out, the insets place the element as they
+// would. A descendant that is hidden, in a container that scrolls
+// vertically, or in another element with AnchorTop does not count, nor
+// does an element of a popover, which is not inside the element.
+func (_handle Element) AnchorTop(y float32) Element {
+	_node := _handle.node()
+	if _node == nil {
+		return Element{}
+	}
+	_ctx := _node.c
+	_ = _ctx
+	return wrapElement(_node.AnchorTop(y))
+}
+
 // Animate returns a value that moves to target over d, easing out, and
 // keeps frames coming while it moves; key tells apart the animations of
 // the element. The value starts at the first target. When the desktop asks
@@ -5193,6 +5213,18 @@ func (_handle Element) Scale(x float32, y float32) Element {
 	_ctx := _node.c
 	_ = _ctx
 	return wrapElement(_node.Scale(x, y))
+}
+
+// ScrollAnchor marks the element that the nearest element around it with
+// AnchorTop places.
+func (_handle Element) ScrollAnchor() Element {
+	_node := _handle.node()
+	if _node == nil {
+		return Element{}
+	}
+	_ctx := _node.c
+	_ = _ctx
+	return wrapElement(_node.ScrollAnchor())
 }
 
 // ScrollIntoView scrolls the containers around the element as little as

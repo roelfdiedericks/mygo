@@ -43,8 +43,8 @@ import (
 // editor; an element attached to another is placed by that one's box.
 // Those are never the same (volatile), nor anything around them, nor
 // anything inside those that change what is inside them. Transforms, as
-// Translate, and the scroll offsets of other containers move elements
-// after layout (place, commit) and are not compared.
+// Translate, the scroll offsets of other containers and AnchorTop move
+// elements after layout (place, commit) and are not compared.
 //
 // TestLayoutCacheMatches lays random trees out with and without the
 // cache, changing them at random frame after frame.
