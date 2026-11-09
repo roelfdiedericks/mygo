@@ -168,7 +168,13 @@ func place(e *node, x, y float32) {
 	for ch := e.first; ch != nil; ch = ch.next {
 		// A copy of an element leaving the flow stays where the flow was.
 		if ch.flags&flagAbsolute != 0 && ch.leaving != 1 {
-			place(ch, e.x, e.y)
+			oy := e.y
+			if off, ok := ch.heldOffset(); ok {
+				// Its marked descendant's top holdY below the padding
+				// box's (HoldTop), whatever its insets said.
+				oy += e.border[0] + ch.holdY - off - ch.y
+			}
+			place(ch, e.x, oy)
 		} else {
 			place(ch, cx, cy)
 		}
@@ -179,6 +185,37 @@ func place(e *node, x, y float32) {
 // what place it, and their unit tells, as the inspector's does.
 func (e *node) insetAny() bool {
 	return e.inset[0].u != unitAuto || e.inset[1].u != unitAuto || e.inset[2].u != unitAuto || e.inset[3].u != unitAuto
+}
+
+// heldOffset returns how far below the top of an absolute element with
+// HoldTop its layout put the descendant marked HoldHere, and whether one
+// is laid out. The boxes inside are still relative to their parents here:
+// the offset is their sum on the way down to it.
+func (e *node) heldOffset() (float32, bool) {
+	if !e.holdTop || e.leaving != 0 {
+		return 0, false
+	}
+	return heldIn(e)
+}
+
+// heldIn returns how far below e's top its first descendant marked
+// HoldHere is, leaving out those hidden, collapsed or leaving, and what is
+// in a container that scrolls vertically or in another element with
+// HoldTop.
+func heldIn(e *node) (float32, bool) {
+	for c := e.first; c != nil; c = c.next {
+		switch {
+		case c.hidden || c.collapsed || c.leaving != 0:
+		case c.holdHere:
+			return c.y, true
+		case c.holdTop || c.flags&flagScrollY != 0:
+		default:
+			if y, ok := heldIn(c); ok {
+				return c.y + y, true
+			}
+		}
+	}
+	return 0, false
 }
 
 // relative returns how far the insets of an element in flow move it from
