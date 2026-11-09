@@ -133,6 +133,11 @@ type editor struct {
 	view  view
 	o     options
 	theme *Theme
+	// barW is how wide its scroll bars' tracks are, barMin how long
+	// their thumbs are at least, and barsAlways whether they show with
+	// the pointer away, by the ui theme (barLook).
+	barW, barMin float32
+	barsAlways   bool
 	// texts are MyGo's strings in the window's language, as of the last
 	// frame.
 	texts l10n.Messages
@@ -263,6 +268,7 @@ func (ed *editor) init(buf *Buffer, o options, t *ui.Theme) {
 		ed.scrollbar = scrollbarDrag{}
 	}
 	ed.theme = o.theme.resolve(t)
+	ed.barW, ed.barMin, ed.barsAlways = barLook(t)
 	ed.view.setTheme(ed.theme)
 	ed.view.readOnly = o.readOnly
 	if ed.view.buf != nil && ed.view.buf != buf {

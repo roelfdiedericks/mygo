@@ -650,6 +650,17 @@ box.HandleInput(func(ev ui.InputEvent) bool {
 from code, as keys of the app's would, without the program getting them
 as the wheel.
 
+The scroll bar is the window's scroll containers' bar, in the theme's
+`Scrollbar` color. It shows with the pointer over the view, whatever the
+app draws over it, as it does over the text, and while the view is up
+from the bottom. It follows the theme as a scroll container's does: its
+width (`ScrollbarWidth`), its thumb's least length
+(`ScrollbarMinLength`), whether it always shows (`ScrollbarsAlways`),
+and whether a dragged thumb keeps its width (`ScrollbarKeepsWidth`).
+`ScrollbarStrip` tells how wide the strip at the view's right edge is
+where the bar takes the pointer, which what the app draws leaves clear to
+keep the bar in sight and in reach.
+
 ## A server's terminal, shown elsewhere
 
 A server that keeps sessions running, as a multiplexer does, keeps each

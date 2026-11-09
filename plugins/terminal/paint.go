@@ -824,21 +824,24 @@ func (v *view) drawPreedit(p *ui.Painter, ox, oy, cw, ch, base float32) {
 	p.Fill(ui.Rect{X: x, Y: y + ch - 1/v.scale, W: w, H: 1 / v.scale}, fg, 0)
 }
 
-// drawScrollbar shows where the viewport is in the scrollback, as a
-// scroll container's bar does (ui.Scrollbar), while the pointer is over
-// the terminal or drags the thumb; in the terminal's text color, as its
-// colors are its own.
+// drawScrollbar shows where the viewport is in the scrollback with the
+// bar of the window's scroll containers, as its theme draws them
+// (ui.Scrollbar): while the pointer is over the terminal or drags the
+// thumb, while the viewport is up from the bottom, and always with the
+// theme's ScrollbarsAlways.
 func (v *view) drawScrollbar(p *ui.Painter, r ui.Rect) {
-	if !v.inView && !v.barHeld {
+	sb := v.scrollbar
+	up := sb.Offset+sb.Len < sb.Total
+	if !v.inView && !v.barHeld && !v.barAlways && !up {
 		return
 	}
-	p.Scrollbar(bar(v.scrollbar, r), ui.ScrollbarState{Dragging: v.barHeld, Color: color(v.colors.Foreground)})
+	p.Scrollbar(v.bar(sb, r), ui.ScrollbarState{Dragging: v.barHeld})
 }
 
 // bar returns the scroll bar of the scrollback sb, along the right edge of
-// box.
-func bar(sb vt.Scrollbar, box ui.Rect) ui.Scrollbar {
-	return ui.Scrollbar{Box: box, View: float32(sb.Len), Content: float32(sb.Total), Offset: float32(sb.Offset)}
+// box, its thumb as long as the theme says at least.
+func (v *view) bar(sb vt.Scrollbar, box ui.Rect) ui.Scrollbar {
+	return ui.Scrollbar{Box: box, View: float32(sb.Len), Content: float32(sb.Total), Offset: float32(sb.Offset), MinLength: v.barMin}
 }
 
 // lru caches shaped text.

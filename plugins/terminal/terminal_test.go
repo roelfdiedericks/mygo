@@ -259,9 +259,10 @@ func TestScrollbackLines(t *testing.T) {
 }
 
 // TestScrollbarDrag: the scroll bar shows while the pointer is over the
-// terminal, as the code editor's does, and goes as it leaves; over its
-// strip the pointer is the arrow rather than the I-beam. It drags the
-// scrollback along: by the thumb, or from where the track is pressed.
+// terminal, as the code editor's does, and while the viewport is up from
+// the bottom; over its strip the pointer is the arrow rather than the
+// I-beam. It drags the scrollback along: by the thumb, or from where the
+// track is pressed.
 func TestScrollbarDrag(t *testing.T) {
 	loadLib(t)
 	term, err := New(Options{Conn: newPipe()})
@@ -332,12 +333,11 @@ func TestScrollbarDrag(t *testing.T) {
 	if !shows(12) {
 		t.Error("the bar went with the pointer still over the terminal")
 	}
-	// The pointer away, it goes though the viewport is up, and comes back
-	// with it.
+	// The pointer away, it stays while the viewport is up.
 	tt.Move(100, -50)
 	tt.Frame()
-	if shows(12) {
-		t.Error("the bar stayed with the pointer away")
+	if !shows(12) {
+		t.Error("the bar went with the pointer away, the viewport up")
 	}
 	tt.Wheel(100, 100, 0, 40)
 	tt.Frame()
@@ -356,6 +356,48 @@ func TestScrollbarDrag(t *testing.T) {
 	tt.Frame()
 	if c := tt.Cursor(); c != ui.CursorText {
 		t.Errorf("over a full-screen program's edge, the pointer is %v, want the I-beam", c)
+	}
+}
+
+// The window's theme sizes the scroll bar and keeps it: a ScrollbarWidth
+// of 16 widens its strip to 22, which ScrollbarStrip tells and where the
+// pointer is the arrow; ScrollbarsAlways shows it with the pointer away;
+// ScrollbarMinLength makes its thumb that long at least.
+func TestScrollbarTheme(t *testing.T) {
+	loadLib(t)
+	term, err := New(Options{Conn: newPipe()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer term.Close()
+	tt := ui.NewTester(func(c *ui.Context) {
+		th := *c.Theme()
+		th.ScrollbarWidth, th.ScrollbarsAlways, th.ScrollbarMinLength = 16, true, 120
+		c.SetTheme(&th)
+		View(c, term).Fill().AutoFocus()
+	}, 400, 200)
+	term.Feed([]byte(strings.Repeat("line\r\n", 100)))
+	tt.Move(-20, -20)
+	tt.Frame()
+	if s := term.ScrollbarStrip(); s != 22 {
+		t.Errorf("strip %v, want 22", s)
+	}
+	// paints reports whether the bar paints at (x, y), by the pixel at
+	// x = 300, off it.
+	paints := func(x, y int) bool {
+		img := tt.Image()
+		s := img.Bounds().Dx() / 400
+		return img.RGBAAt(x*s, y*s) != img.RGBAAt(300*s, y*s)
+	}
+	// At the bottom, the thumb is 120 long, up to 198, and 16 wide from 3
+	// in: x 381 to 397.
+	if !paints(389, 100) || paints(375, 100) {
+		t.Errorf("the bar with the pointer away: at 389 %v, at 375 %v", paints(389, 100), paints(375, 100))
+	}
+	tt.Move(385, 100)
+	tt.Frame()
+	if c := tt.Cursor(); c != ui.CursorDefault {
+		t.Errorf("over the wide strip, the pointer is %v, want the arrow", c)
 	}
 }
 

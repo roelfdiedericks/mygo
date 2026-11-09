@@ -8,6 +8,8 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
+// scrollbarWidth is how wide the scroll bar takes the pointer with the
+// theme's ScrollbarWidth unset: its 6 DIP thumb, and room beside it.
 const scrollbarWidth = 10
 
 // input takes the editor's input as it comes: keys, text, edit commands,
@@ -691,12 +693,16 @@ func (v *view) taskBox(x float32, y float64) (int, bool) {
 
 // overScrollbar reports whether x of the element is on the scroll bar.
 func (v *view) overScrollbar(x float32) bool {
-	return v.hs.top(len(v.paras)) > float64(v.viewH) && x >= v.rect.W-scrollbarWidth
+	w := v.barW
+	if w <= 0 {
+		w = scrollbarWidth
+	}
+	return v.hs.top(len(v.paras)) > float64(v.viewH) && x >= v.rect.W-w
 }
 
 // bar returns the scroll bar, in the element.
 func (v *view) bar() ui.Scrollbar {
-	return ui.Scrollbar{Box: ui.Rect{W: v.rect.W, H: v.rect.H}, View: v.viewH, Content: float32(v.hs.top(len(v.paras))), Offset: float32(v.scroll)}
+	return ui.Scrollbar{Box: ui.Rect{W: v.rect.W, H: v.rect.H}, View: v.viewH, Content: float32(v.hs.top(len(v.paras))), Offset: float32(v.scroll), MinLength: v.barMin}
 }
 
 // thumbBox returns the top and the height of the scroll bar's thumb, in

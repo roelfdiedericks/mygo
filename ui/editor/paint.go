@@ -115,7 +115,7 @@ func (ed *editor) paint(p *ui.Painter, r ui.Rect) {
 	y1 := ed.scrollY + float64(min(r.H, clip.Y+clip.H-r.Y))
 	// The horizontal scroll bar at the bottom of what shows, as an editor
 	// as high as its content may run far below the window's.
-	ed.hbarY = max(0, min(r.H, clip.Y+clip.H-r.Y)) - scrollbarWidth
+	ed.hbarY = max(0, min(r.H, clip.Y+clip.H-r.Y)) - ed.barW
 	var f frame
 	f.first, f.last = ed.visibleLines(y0, y1)
 	ed.shown = [2]int{f.first, f.last}
@@ -868,11 +868,11 @@ func (ed *editor) paintScrollbars(p *ui.Painter, r ui.Rect, f *frame) {
 	vertical, horizontal := ed.scrollbars()
 	// The thumbs and the carets' marks show while the pointer is over the
 	// editor, or drags a thumb, as a scroll container's do, or always
-	// when kept (KeepScrollbars), looking the same; the marks of changes,
-	// matches and diagnostics always.
-	shown := ed.pointerIn || ed.scrollbar.active || ed.o.keepScrollbars
+	// when kept (KeepScrollbars, or the theme's ScrollbarsAlways), looking
+	// the same; the marks of changes, matches and diagnostics always.
+	shown := ed.pointerIn || ed.scrollbar.active || ed.o.keepScrollbars || ed.barsAlways
 	if vertical {
-		x := r.X + r.W - scrollbarWidth
+		x := r.X + r.W - ed.barW
 		span := float32(ed.scrollMax()) + ed.viewH
 		mark := func(y float64, h float32, x0, w float32, c ui.Color) {
 			yy := r.Y + float32(y/float64(span))*r.H
@@ -937,7 +937,7 @@ func (ed *editor) paintScrollbars(p *ui.Painter, r ui.Rect, f *frame) {
 		// Carets.
 		if len(ed.sels) <= 100 {
 			for _, s := range ed.sels {
-				mark(h.top(v.text.LineOf(s.head)), 2, 0, scrollbarWidth, ct.Text.Alpha(0.5))
+				mark(h.top(v.text.LineOf(s.head)), 2, 0, ed.barW, ct.Text.Alpha(0.5))
 			}
 		}
 		p.Scrollbar(ed.barIn(r, false), ui.ScrollbarState{Dragging: ed.scrollbar.active && !ed.scrollbar.horizontal})

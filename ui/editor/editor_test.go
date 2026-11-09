@@ -834,3 +834,25 @@ func TestCodeEditorNoScrollbarsCancelsDrag(t *testing.T) {
 	}
 	ct.tt.Release(x, 300)
 }
+
+// The editor's scroll bar tracks are as wide as the theme's ScrollbarWidth
+// says, with 3 DIPs each side, as a scroll container's: a wide one takes
+// the pointer over its width.
+func TestCodeEditorScrollbarWidth(t *testing.T) {
+	st := &State{Buffer: NewBuffer(strings.Repeat("line\n", 200))}
+	tt := ui.NewTester(func(c *ui.Context) {
+		th := *c.Theme()
+		th.ScrollbarWidth = 16
+		c.SetTheme(&th)
+		View(c, st).Fill().AutoFocus()
+	}, 600, 400)
+	tt.Frame()
+	if w := st.ed.trackWidth(); w != 22 {
+		t.Errorf("track %v DIPs wide, want 22", w)
+	}
+	tt.Move(600-20, 5)
+	tt.Frame()
+	if c := tt.Cursor(); c != ui.CursorDefault {
+		t.Errorf("cursor over the wide scroll bar %v, want the arrow", c)
+	}
+}

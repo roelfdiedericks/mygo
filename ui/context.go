@@ -812,13 +812,15 @@ type state struct {
 	scrollX, scrollY float64
 	contentW         float64
 	contentH         float64
-	// barInset is the element's ScrollbarInsets, and barWidth the width
-	// of its scroll bars, its theme's ScrollbarWidth.
-	barInset [4]float32
-	barWidth float32
+	// barInset is the element's ScrollbarInsets, barWidth the width of
+	// its scroll bars, its theme's ScrollbarWidth, and barMin the least
+	// length of their thumbs, its ScrollbarMinLength.
+	barInset         [4]float32
+	barWidth, barMin float32
 	// barsShown reports whether the last frame painted the element's
 	// scroll bars: they show only while it is hovered or a bar is
-	// dragged, unless it keeps them (KeepScrollbars).
+	// dragged, unless it keeps them (KeepScrollbars, or the theme's
+	// ScrollbarsAlways).
 	barsShown, hideScrollbars bool
 	// track is the ScrollState of the last frame's element, which events
 	// that scroll it update (scrollTo).

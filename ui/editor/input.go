@@ -14,7 +14,25 @@ type scrollbarDrag struct {
 	grab       float32 // where in the thumb the press caught it
 }
 
+// scrollbarWidth is how wide the scroll bars' tracks are with the theme's
+// ScrollbarWidth unset: its 6 DIP thumb, and room beside it.
 const scrollbarWidth = 10
+
+// barLook returns how wide the scroll bars' tracks are by the theme's
+// ScrollbarWidth (the thumb and 3 DIPs each side of it, as a scroll
+// container's track; scrollbarWidth unset), how long their thumbs are at
+// least (ScrollbarMinLength), and whether they show with the pointer away
+// (ScrollbarsAlways).
+func barLook(t *ui.Theme) (width, minLen float32, always bool) {
+	if t == nil {
+		return scrollbarWidth, 0, false
+	}
+	width = scrollbarWidth
+	if t.ScrollbarWidth > 0 {
+		width = t.ScrollbarWidth + 6
+	}
+	return width, t.ScrollbarMinLength, t.ScrollbarsAlways
+}
 
 // input takes the editor's input as it comes.
 func (ed *editor) input(ev ui.InputEvent) bool {
@@ -153,10 +171,10 @@ const (
 
 func (ed *editor) regionAt(x, y float32) region {
 	vertical, horizontal := ed.scrollbars()
-	if vertical && x >= ed.r.W-scrollbarWidth {
+	if vertical && x >= ed.r.W-ed.barW {
 		return regionVScroll
 	}
-	if horizontal && y >= ed.hbarY && y < ed.hbarY+scrollbarWidth {
+	if horizontal && y >= ed.hbarY && y < ed.hbarY+ed.barW {
 		return regionHScroll
 	}
 	if x < ed.gutterW {
@@ -424,7 +442,7 @@ func (ed *editor) trackWidth() float32 {
 	if ed.o.fitContent || ed.o.hideScrollbars {
 		return 0
 	}
-	return scrollbarWidth
+	return ed.barW
 }
 
 // scrollbars reports which scroll bars the editor shows, and takes
@@ -495,14 +513,16 @@ func (ed *editor) setScrollShared(y float64) {
 func (ed *editor) bar(horizontal bool) ui.Scrollbar {
 	if horizontal {
 		return ui.Scrollbar{
-			Box:        ui.Rect{X: ed.textX, W: ed.hTrack(), H: ed.hbarY + scrollbarWidth},
+			Box:        ui.Rect{X: ed.textX, W: ed.hTrack(), H: ed.hbarY + ed.barW},
 			Horizontal: true,
 			View:       ed.r.W - ed.textX, Content: ed.view.maxLine + ed.view.charWidth*4, Offset: ed.scrollX,
+			MinLength: ed.barMin,
 		}
 	}
 	return ui.Scrollbar{
 		Box:  ui.Rect{W: ed.r.W, H: ed.viewH},
 		View: ed.viewH, Content: float32(ed.scrollMax()) + ed.viewH, Offset: float32(ed.scrollY),
+		MinLength: ed.barMin,
 	}
 }
 

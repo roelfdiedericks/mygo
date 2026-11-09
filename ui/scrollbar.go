@@ -26,12 +26,15 @@ type Scrollbar struct {
 	// unit, as rows of a terminal's scrollback: the bar shows nothing
 	// unless Content is longer than View.
 	View, Content, Offset float32
+	// MinLength is the thumb's least length, in DIPs, as the theme's
+	// ScrollbarMinLength gives it to a view's bar: 24 when 0.
+	MinLength float32
 }
 
 // ScrollbarState is how a Scrollbar paints: Dragging while the pointer
-// drags its thumb, which widens it, as a scroll container's; Color, if
-// not zero, colors it for a view whose colors are not the theme's, as a
-// terminal's, in place of Theme.Scrollbar.
+// drags its thumb, which widens it, as a scroll container's, unless the
+// theme's ScrollbarKeepsWidth keeps it; Color, if not zero, colors it for
+// a view whose colors are not the theme's, in place of Theme.Scrollbar.
 type ScrollbarState struct {
 	Dragging bool
 	Color    Color
@@ -52,7 +55,7 @@ func (s Scrollbar) along() (pos, track float32) {
 // horizontal bar, else its Y, and how long it is.
 func (s Scrollbar) Thumb() (start, length float32) {
 	pos, track := s.along()
-	t := scrollThumb(pos, track, s.View, max(s.Content, s.View), s.Offset)
+	t := scrollThumb(pos, track, s.View, max(s.Content, s.View), s.Offset, s.MinLength)
 	return t.Y, t.H
 }
 
@@ -90,7 +93,7 @@ func (p *Painter) Scrollbar(s Scrollbar, st ScrollbarState) {
 		// As faint as the theme's, which High Contrast makes bolder.
 		c = st.Color.Alpha(float32(t.Scrollbar.A) / 255)
 	}
-	p.scrollThumbFill(s.thumbRect(t.scrollbarWidth()), s.Horizontal, st.Dragging, c)
+	p.scrollThumbFill(s.thumbRect(t.scrollbarWidth()), s.Horizontal, st.Dragging && !t.ScrollbarKeepsWidth, c)
 }
 
 // scrollThumbFill paints a thumb at bar, widened toward the view while

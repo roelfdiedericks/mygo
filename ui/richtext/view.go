@@ -140,6 +140,13 @@ type view struct {
 	focused    bool
 	blinkStart time.Time
 	services   ui.Services
+
+	// barW is how wide the scroll bar takes the pointer, barMin how long
+	// its thumb is at least, and barsAlways whether it shows with the
+	// pointer away, by the theme as the last paint read it.
+	barW, barMin float32
+	barsAlways   bool
+
 	// changed is set by an edit of the user, which the next build reports.
 	changed bool
 	// numbers caches the numbers of the items of numbered lists, for the

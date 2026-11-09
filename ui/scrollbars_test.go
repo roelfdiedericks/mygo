@@ -34,7 +34,7 @@ func TestScrollbarsHiddenPreservesScrollingAndContentInput(t *testing.T) {
 					}
 					track.X, track.Y = 50, 60
 					tt.Frame()
-					g := scrollBars(Rect{st.x, st.y, st.w, st.h}, st.barInset, float32(st.contentW), float32(st.contentH), float32(st.scrollX), float32(st.scrollY), st.flags, tt.rt.c.theme.scrollbarWidth(), st.rtl)
+					g := scrollBars(Rect{st.x, st.y, st.w, st.h}, st.barInset, float32(st.contentW), float32(st.contentH), float32(st.scrollX), float32(st.scrollY), st.flags, tt.rt.c.theme.scrollbarWidth(), 0, st.rtl)
 					trackRect := g.vTrack
 					if horizontal {
 						trackRect = g.hTrack
@@ -82,7 +82,7 @@ func TestScrollbarsHiddenCancelsActiveDragWithoutContentClick(t *testing.T) {
 	defer tt.rt.close()
 	tt.Scroll(50, 50, 30, 40)
 	tt.Move(50, 50)
-	g := scrollBars(Rect{0, 0, 100, 100}, st.barInset, 400, 400, float32(st.scrollX), float32(st.scrollY), st.flags, tt.rt.c.theme.scrollbarWidth(), false)
+	g := scrollBars(Rect{0, 0, 100, 100}, st.barInset, 400, 400, float32(st.scrollX), float32(st.scrollY), st.flags, tt.rt.c.theme.scrollbarWidth(), 0, false)
 	x, y := g.h.X+g.h.W/2, g.h.Y+g.h.H/2
 	tt.Press(x, y)
 	if tt.rt.scrollDrag.st != st {
@@ -260,7 +260,7 @@ func TestScrollbarsFinalFluentValueKeepsVisibleThumbDrag(t *testing.T) {
 	}, 140, 140)
 	defer tt.rt.close()
 	tt.Move(50, 50)
-	g := scrollBars(Rect{0, 0, 100, 100}, st.barInset, 400, 400, 0, 0, st.flags, tt.rt.c.theme.scrollbarWidth(), false)
+	g := scrollBars(Rect{0, 0, 100, 100}, st.barInset, 400, 400, 0, 0, st.flags, tt.rt.c.theme.scrollbarWidth(), 0, false)
 	x, y := g.h.X+g.h.W/2, g.h.Y+g.h.H/2
 	tt.Press(x, y)
 	tt.Frame()
@@ -321,7 +321,7 @@ func TestKeepScrollbars(t *testing.T) {
 				}
 			}
 			// A kept thumb is dragged as a hovered one is.
-			g := scrollBars(Rect{0, 0, 100, 100}, st.barInset, 400, 400, 0, 0, st.flags, tt.rt.c.theme.scrollbarWidth(), false)
+			g := scrollBars(Rect{0, 0, 100, 100}, st.barInset, 400, 400, 0, 0, st.flags, tt.rt.c.theme.scrollbarWidth(), 0, false)
 			tt.Move(120, 120)
 			tt.Frame()
 			x, y := g.v.X+g.v.W/2, g.v.Y+g.v.H/2
@@ -388,6 +388,87 @@ func TestTableScrollbars(t *testing.T) {
 		if st.barsShown != tc.shown || st.hideScrollbars == tc.visible {
 			t.Errorf("%s: rows' bars shown %v hidden %v, want shown %v hidden %v", tc.name, st.barsShown, st.hideScrollbars, tc.shown, !tc.visible)
 		}
+		tt.rt.close()
+	}
+}
+
+// With the theme's ScrollbarsAlways, a container whose content overflows
+// shows its bar with the pointer elsewhere, and a first press on its
+// track pages.
+func TestScrollbarsAlways(t *testing.T) {
+	var sc *node
+	tt := coreNewTester(func(c *context) {
+		th := *c.Theme()
+		th.ScrollbarsAlways = true
+		c.SetTheme(&th)
+		coreRow(c).Children(func() {
+			sc = coreScroll(c).Size(100, 200).Children(func() { coreBox(c).Size(100, 800) })
+		})
+	}, 300, 200)
+	defer tt.rt.close()
+	tt.Move(250, 150)
+	tt.Frame()
+	st := sc.st
+	if !st.barsShown {
+		t.Error("the bar of overflowing content does not show with the pointer elsewhere")
+	}
+	g := scrollBars(Rect{st.x, st.y, st.w, st.h}, st.barInset, float32(st.contentW), float32(st.contentH), 0, 0, st.flags, st.barWidth, st.barMin, false)
+	if !g.vertical {
+		t.Fatal("no vertical bar")
+	}
+	x, y := g.vTrack.X+g.vTrack.W/2, g.v.Y+g.v.H+20
+	tt.Press(x, y)
+	tt.Release(x, y)
+	tt.Frame()
+	if st.scrollY == 0 {
+		t.Error("a first press on the track did not page")
+	}
+}
+
+// A thumb is as long as the view is of the content, but the theme's
+// ScrollbarMinLength at least (24 when 0), and its track at most: a
+// container's, and a view's ui.Scrollbar alike.
+func TestScrollbarMinLength(t *testing.T) {
+	box, flags := Rect{0, 0, 100, 200}, uint32(flagScrollY)
+	for _, c := range []struct {
+		min, content, want float32
+	}{{0, 400, 98}, {0, 20000, 24}, {80, 20000, 80}, {300, 20000, 196}} {
+		if g := scrollBars(box, [4]float32{}, 100, c.content, 0, 0, flags, 6, c.min, false); g.v.H != c.want {
+			t.Errorf("container, min %v, content %v: thumb %v long, want %v", c.min, c.content, g.v.H, c.want)
+		}
+		if _, l := (Scrollbar{Box: box, View: 200, Content: c.content, MinLength: c.min}).Thumb(); l != c.want {
+			t.Errorf("view, min %v, content %v: thumb %v long, want %v", c.min, c.content, l, c.want)
+		}
+	}
+}
+
+// A dragged thumb widens toward the view, but for a theme's
+// ScrollbarKeepsWidth, which keeps it as wide as at rest.
+func TestScrollbarKeepsWidth(t *testing.T) {
+	for _, keep := range []bool{false, true} {
+		var sc *node
+		tt := coreNewTester(func(c *context) {
+			th := *c.Theme()
+			th.ScrollbarKeepsWidth = keep
+			c.SetTheme(&th)
+			sc = coreScroll(c).Size(100, 200).Children(func() { coreBox(c).Size(100, 800) })
+		}, 100, 200)
+		tt.Move(50, 50)
+		tt.Frame()
+		st := sc.st
+		g := scrollBars(Rect{st.x, st.y, st.w, st.h}, st.barInset, float32(st.contentW), float32(st.contentH), 0, 0, st.flags, st.barWidth, st.barMin, false)
+		x, y := g.v.X+g.v.W/2, g.v.Y+g.v.H/2
+		tt.Move(x, y)
+		tt.Press(x, y)
+		tt.Frame()
+		img := tt.Image()
+		s := img.Bounds().Dx() / 100
+		// Just left of the thumb at rest, by the pixel well clear of it.
+		widened := img.RGBAAt(int(g.v.X-1)*s, int(y)*s) != img.RGBAAt(10*s, int(y)*s)
+		if widened == keep {
+			t.Errorf("ScrollbarKeepsWidth %v: the dragged thumb widened %v", keep, widened)
+		}
+		tt.Release(x, y)
 		tt.rt.close()
 	}
 }

@@ -211,7 +211,14 @@ rest at once.
 A scroll container whose content overflows it shows the thumbs of its
 scroll bars over its content while the pointer is over it, which the user
 drags; they take no room. Right to left, the vertical bar is on the left. The theme's `ScrollbarWidth` sets their width and
-its `Scrollbar` their color.
+its `Scrollbar` their color. A thumb is as long as the view is of the
+content, but at least the theme's `ScrollbarMinLength` (24 DIPs when 0),
+so that a long document's thumb is still easy to take. The theme's
+`ScrollbarsAlways` keeps every container's bars showing while their
+content overflows, as `KeepScrollbars(true)` does for one, and the code
+editor's, rich text's and the terminal's too, as macOS's "Always" setting
+does. A thumb widens toward the view while it is dragged, unless the
+theme's `ScrollbarKeepsWidth` keeps it as wide as at rest.
 
 `ScrollbarInsets` moves the bars in from the container's edges, CSS style
 as `Padding`: the vertical bar runs from the top inset to the bottom one,

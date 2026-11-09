@@ -1020,6 +1020,20 @@ func (t *Terminal) SetMinimumContrast(ratio float32) {
 	t.redraw()
 }
 
+// ScrollbarStrip returns how wide the strip at the view's right edge is
+// over which the scroll bar takes the pointer, in DIPs, by the window's
+// theme as the view's last frame read it: what an app draws over the view
+// leaves it clear to keep the bar in sight and in reach.
+func (t *Terminal) ScrollbarStrip() float32 {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	w := float32(0)
+	if t.v != nil {
+		w = t.v.barW
+	}
+	return barStrip(w)
+}
+
 // UseTheme gives a terminal no view shows the colors of one that does, as
 // a server's for the window showing its session: programs asking the
 // colors (OSC 4, 10, 11, 12), or whether they are dark (CSI ? 996 n), get

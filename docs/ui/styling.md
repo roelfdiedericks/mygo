@@ -262,7 +262,9 @@ c.SetTheme(&t)
 and the sizes of check boxes, switches, sliders and the rows of tables and
 trees, are multiples of it. It is 4 by default; 3 makes every widget
 compact, 5 roomy. `FontSize` sizes their text, `Radius` rounds their
-corners, and `ScrollbarWidth` sets the width of scroll bars. On macOS,
+corners, and `ScrollbarWidth` sets the width of scroll bars,
+`ScrollbarMinLength` the least length of their thumbs (24 by default), and
+`ScrollbarsAlways` keeps them showing (see [Scroll bars](scroll.md#scroll-bars)). On macOS,
 rounded corners, the widgets' and your elements', curve continuously as
 AppKit's and SwiftUI's do, and elsewhere as quarter circles, as Windows
 and GTK draw them. Size your own
