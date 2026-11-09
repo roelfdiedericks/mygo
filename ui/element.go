@@ -596,6 +596,11 @@ type node struct {
 	// absolute element's insets are measured from instead of the parent's.
 	// A split uses it to keep its handle on the divider.
 	placeOn *node
+	// holdTop places an absolute element by its descendant marked
+	// holdHere, whose top goes holdY below the parent's padding box's
+	// (HoldTop).
+	holdTop, holdHere bool
+	holdY             float32
 	// overflow is set on a toolbar, whose layout notes there the controls
 	// it had no room for, and takes them out of the flow, collapsed.
 	overflow  *[]toolbarItem
@@ -1168,6 +1173,25 @@ func (e *node) Top(v float32) *node    { e.inset[0] = px(v); return e }
 func (e *node) Right(v float32) *node  { e.inset[1] = px(v); e.unlog(1, logInset); return e }
 func (e *node) Bottom(v float32) *node { e.inset[2] = px(v); return e }
 func (e *node) Left(v float32) *node   { e.inset[3] = px(v); e.unlog(3, logInset); return e }
+
+// HoldTop places an Absolute element by its descendant marked with
+// HoldHere rather than by its insets: the element goes where that
+// descendant's top is y DIPs below the top of the parent's padding box,
+// wherever the element's layout puts the descendant, so that what grows
+// or shrinks above the descendant moves the element, and what is read
+// there stays in place, as a browser's scroll anchoring keeps it. Without
+// a marked descendant laid out, the insets place the element as they
+// would. A descendant that is hidden, in a container that scrolls
+// vertically, or in another element with HoldTop does not count, nor does
+// an element of a popover, which is not inside the element.
+func (e *node) HoldTop(y float32) *node {
+	e.holdTop, e.holdY = true, y
+	return e
+}
+
+// HoldHere marks the element that the nearest element around it with
+// HoldTop places.
+func (e *node) HoldHere() *node { e.holdHere = true; return e }
 
 // TopPercent, RightPercent, BottomPercent and LeftPercent place the
 // element as Top, Right, Bottom and Left do, by a percentage of the

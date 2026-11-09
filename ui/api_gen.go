@@ -5595,6 +5595,38 @@ func (_handle Element) HitTest(fn func(x float32, y float32, r Rect) bool) Eleme
 	return wrapElement(_node.HitTest(fn))
 }
 
+// HoldHere marks the element that the nearest element around it with
+// HoldTop places.
+func (_handle Element) HoldHere() Element {
+	_node := _handle.node()
+	if _node == nil {
+		return Element{}
+	}
+	_ctx := _node.c
+	_ = _ctx
+	return wrapElement(_node.HoldHere())
+}
+
+// HoldTop places an Absolute element by its descendant marked with
+// HoldHere rather than by its insets: the element goes where that
+// descendant's top is y DIPs below the top of the parent's padding box,
+// wherever the element's layout puts the descendant, so that what grows
+// or shrinks above the descendant moves the element, and what is read
+// there stays in place, as a browser's scroll anchoring keeps it. Without
+// a marked descendant laid out, the insets place the element as they
+// would. A descendant that is hidden, in a container that scrolls
+// vertically, or in another element with HoldTop does not count, nor does
+// an element of a popover, which is not inside the element.
+func (_handle Element) HoldTop(y float32) Element {
+	_node := _handle.node()
+	if _node == nil {
+		return Element{}
+	}
+	_ctx := _node.c
+	_ = _ctx
+	return wrapElement(_node.HoldTop(y))
+}
+
 // Hovered reports whether the pointer is over the element. While the
 // pointer presses an element, the elements it was over as the press began,
 // as those around the element pressed, stay hovered as long as it is over

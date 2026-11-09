@@ -127,6 +127,28 @@ ui.Box(c).Fill().Children(func() {
 })
 ```
 
+`HoldTop(y)` places an absolute element by the descendant marked with
+`HoldHere` instead of by its top: the element goes where that descendant's
+top is `y` DIPs below the top of the parent's box, wherever its layout put
+it. What grows or shrinks above the descendant then moves the element,
+and what the user reads stays in place, as a browser's scroll anchoring
+keeps it: a long document drawn over a view that scrolls by itself, whose
+sections fold and unfold out of sight above. Without a marked descendant
+laid out, its insets place it. A descendant that is hidden, inside a
+container that scrolls vertically, inside another element with `HoldTop`,
+or in a popover does not count.
+
+```go
+doc := ui.Column(c).Absolute().Left(0).Right(0).Top(top).HoldTop(at)
+doc.Children(func() {
+	for _, s := range sections {
+		if row := drawSection(c, s); s.ID == app.topInView {
+			row.HoldHere()
+		}
+	}
+})
+```
+
 ## Paint order
 
 Siblings paint in the order they are built, those in the flow first and
