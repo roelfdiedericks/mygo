@@ -1339,6 +1339,21 @@ func (t *Terminal) AtBottom() bool {
 	return t.term == nil || t.term.AtBottom()
 }
 
+// LinesBelow returns how many rows of the terminal are below its view:
+// those a scroll to the bottom brings into sight, 0 at the bottom. It
+// tells where the viewport is now, not as of the last paint, so that it
+// is 0 as soon as ScrollToBottom returns, while a glide may still show
+// the rows above.
+func (t *Terminal) LinesBelow() int {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.term == nil {
+		return 0
+	}
+	sb := t.term.Scrollbar()
+	return int(max(int64(sb.Total)-int64(sb.Offset)-int64(sb.Len), 0))
+}
+
 // scrollBack scrolls the scrollback with fn, but for a full-screen
 // program's screen, and reports whether it did.
 func (t *Terminal) scrollBack(fn func(*vt.Terminal)) bool {

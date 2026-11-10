@@ -286,6 +286,32 @@ func TestScrollFromAppElement(t *testing.T) {
 	}
 }
 
+// LinesBelow counts the rows under the view: as many as it is scrolled up,
+// and none at once after ScrollToBottom.
+func TestLinesBelow(t *testing.T) {
+	loadLib(t)
+	term, err := New(Options{Conn: newPipe()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer term.Close()
+	tt := ui.NewTester(func(c *ui.Context) { View(c, term).Fill() }, 400, 200)
+	term.Feed([]byte(strings.Repeat("line\r\n", 100)))
+	tt.Frame()
+	if n := term.LinesBelow(); n != 0 {
+		t.Errorf("at the bottom: %d lines below, want 0", n)
+	}
+	term.ScrollRows(-10)
+	tt.Frame()
+	if n := term.LinesBelow(); n != 10 {
+		t.Errorf("10 rows up: %d lines below, want 10", n)
+	}
+	term.ScrollToBottom()
+	if n := term.LinesBelow(); n != 0 {
+		t.Errorf("after ScrollToBottom: %d lines below, want 0", n)
+	}
+}
+
 // The pointer over an element the app draws over the view is over the
 // view for its scroll bar, which shows there as over the text, and goes
 // with the pointer off the view.
