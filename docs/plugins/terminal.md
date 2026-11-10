@@ -658,7 +658,8 @@ box.HandleInput(func(ev ui.InputEvent) bool {
 
 `ScrollRows`, `ScrollToTop` and `ScrollToBottom` scroll the scrollback
 from code, as keys of the app's would, without the program getting them
-as the wheel.
+as the wheel. `LinesBelow` tells how many rows are below the view, for a
+button of the app's that jumps to the end and says how far it is.
 
 ## A server's terminal, shown elsewhere
 
