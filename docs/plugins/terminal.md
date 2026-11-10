@@ -192,6 +192,13 @@ term, err := terminal.New(terminal.Options{
   setting as 3 would be the setting's), and `Precision` scales a
   touchpad's distance (1 by default). `SetScrollMultiplier` changes it in
   a running terminal.
+- `SmoothScroll` glides the view to where a notch of the mouse wheel
+  scrolls it, over 150 ms, rather than jumping there by whole rows; the
+  terminal itself is there at once. What an app draws among the rows
+  (`AppPlacements`) moves with the glide. A touchpad, which already
+  follows the fingers, a program that takes the wheel, and the desktop
+  asking for less motion scroll as without it. `SetSmoothScroll` changes
+  it in a running terminal.
 - `MinimumContrast` is the least contrast text has with its background,
   as Ghostty's `minimum-contrast`: a WCAG ratio from 1 (none, the
   default) to 21. Text with less, as a program's light gray on a light
