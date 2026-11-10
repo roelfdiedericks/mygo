@@ -560,12 +560,14 @@ The terminal's methods are safe from any goroutine:
   text, which such a program reads as `text/plain`.
 - `Feed` shows bytes as if the program wrote them, text and escape
   sequences.
-- `Title`, `Dir` (the directory the shell reported), `Size` (in cells) and
-  `Text` (the screen and its scrollback) read the terminal.
+- `Title`, `Dir` (the directory the shell reported), `Size` (in cells),
+  `Cursor` (the cell the cursor is on) and `Text` (the screen and its
+  scrollback) read the terminal.
 - `HoveredLink` returns the link Command (Control elsewhere) is held over
   in the view, as `OpenLink` takes it, whether it is a file path, and the
   rectangle of its cells relative to the view: read it after `View` to
-  show a preview of the link over the view.
+  show a preview of the link over the view. `CellRect` returns the
+  rectangle of any cell, by column and row of the screen, the same way.
 - `SetFont` and `SetTheme` change the font and the colors; `SetFont` also
   sets the size a zoom resets to, and drops the zoom.
 - `Resize` sets the size of a terminal no view shows, and `Snapshot`
@@ -588,6 +590,63 @@ term, err := terminal.New(terminal.Options{Conn: session})
 
 A terminal whose `Conn` never sends anything shows what the app writes
 with `Feed`, as a log with colors would.
+
+## Drawing your own, among the rows
+
+An app can draw something of its own in the terminal where it chooses,
+which scrolls and reflows with the rows as a program's image does: a
+widget under a command's output, a chart, a form. It places an image of
+its own there and draws over it. Name a range of image ids as the app's
+with `AppImages`; the view draws no image of those ids, and reports where
+each is placed:
+
+```go
+term, err := terminal.New(terminal.Options{Conn: conn, AppImages: struct{ First, Last uint32 }{1000, 1999}})
+
+// Place one over 40×6 cells at the cursor, which moves below it: a 1×1
+// image of the id, transmitted, then placed with the cells it takes.
+pixel := base64.StdEncoding.EncodeToString([]byte{0, 0, 0, 0})
+term.Feed([]byte(fmt.Sprintf("\x1b_Ga=t,f=32,s=1,v=1,i=1000,q=2;%s\x1b\\\x1b_Ga=p,i=1000,p=1,c=40,r=6,q=2\x1b\\", pixel)))
+
+// In the view function, after View: draw at each placement.
+terminal.View(c, term).Fill()
+for _, p := range term.AppPlacements() {
+	if p.Visible {
+		ui.Box(c.Key(p.Image)).Absolute().Left(p.Rect.X).Top(p.Rect.Y).Size(p.Rect.W, p.Rect.H).Children(func() { /* ... */ })
+	}
+}
+```
+
+`AppPlacements` gives each placement's image and placement ids, its first
+column and row (negative for a row scrolled off above the viewport), its
+cells, its rectangle in DIPs relative to the view, and whether any of it
+is in the viewport. A placement of the same image and placement ids
+replaces the one before, which changes its size; deleting the image
+(`a=d,d=I`) removes it, and so does its row leaving the scrollback, as
+the oldest lines go. A `Mirror` carries them to the other terminal as it
+does images, where that terminal's view reports them. A terminal no view
+shows, as a server's, reports them too, in cells, with an empty rectangle.
+
+What the app draws over the view takes the pointer from it: the wheel
+over it would scroll nothing. The element hands its scroll events to
+the terminal with `Scroll`, which scrolls the scrollback, or gives the
+program the wheel, as the view does; the event's `X` and `Y` are
+relative to the view, so add the placement's `Rect` to the element's:
+
+```go
+box.HandleInput(func(ev ui.InputEvent) bool {
+	if ev.Kind != ui.InputScroll {
+		return false
+	}
+	ev.X, ev.Y = ev.X+p.Rect.X, ev.Y+p.Rect.Y
+	return term.Scroll(ev)
+})
+```
+
+`ScrollRows`, `ScrollToTop` and `ScrollToBottom` scroll the scrollback
+from code, as keys of the app's would, without the program getting them
+as the wheel. `LinesBelow` tells how many rows are below the view, for a
+button of the app's that jumps to the end and says how far it is.
 
 ## A server's terminal, shown elsewhere
 
@@ -615,7 +674,11 @@ frame, due := m.Frame() // after output; due: a synchronized update holds it
 Frames draw rows where they are, and rows that scroll off pass through the
 window's screen in order, so that its scrollback is the server's; soft wraps
 stay soft. Each cell is drawn in its own style, so an empty cell stays empty
-after a colored one. A frame reads the terminal as a view does, taking its
+after a colored one. Images go with their rows: placed where they show,
+their pixels sent once, and an image on a row of the scrollback placed as
+its row passes through the window's screen, as when a Mirror starts over
+for a window that attaches, so that the window keeps it as the server
+does. A frame reads the terminal as a view does, taking its
 record of what changed: mirror a terminal no view shows, as a server's, with
 as many Mirrors as it has windows. A frame does not come while a program holds a synchronized update
 (mode 2026), up to a second: `Frame` then reports that one is due. The

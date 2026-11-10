@@ -178,6 +178,9 @@ type view struct {
 	// virtual are the virtual placements, by their images' ids, which
 	// placeholder cells show.
 	virtual map[uint32][]virtualImage
+	// app are the placements of the app's own images (Options.AppImages),
+	// as of the last paint, for AppPlacements.
+	app []vt.Placement
 
 	keys    *vt.KeyEncoder
 	mouse   *vt.MouseEncoder
@@ -1207,6 +1210,165 @@ func (t *Terminal) HoveredLink() (link string, path bool, at ui.Rect) {
 		W: float32(h.x1-h.x0) * cw,
 		H: ch,
 	}
+}
+
+// CellRect returns the rectangle of the cell at column col and row row of
+// the screen, in DIPs relative to the view, as HoveredLink gives a
+// link's: rows count from the top of the viewport, so a row scrolled
+// off above is negative. False while no view shows the terminal. An app
+// draws something at a cell with it, read in the view function after
+// View.
+func (t *Terminal) CellRect(col, row int) (ui.Rect, bool) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	v := t.v
+	if v == nil || v.scale == 0 || v.cellW == 0 {
+		return ui.Rect{}, false
+	}
+	cw, ch := float32(v.cellW)/v.scale, float32(v.cellH)/v.scale
+	return ui.Rect{X: float32(v.ox)/v.scale + float32(col)*cw, Y: float32(v.oy)/v.scale + float32(row)*ch, W: cw, H: ch}, true
+}
+
+// AppPlacement is where the app placed one of its images
+// (Options.AppImages): the image's id and the placement's, and the cells
+// it takes, as a rectangle in DIPs relative to the view. Visible tells
+// that some of it is in the viewport; Row is its first row from the
+// viewport's top, negative above it, with its Cols and Rows.
+type AppPlacement struct {
+	Image, ID  uint32
+	Rect       ui.Rect
+	Visible    bool
+	Col, Row   int
+	Cols, Rows int
+}
+
+// AppPlacements returns the placements of the app's images, as of the
+// last paint: read it in the view function after View, and draw at each
+// Rect. A terminal no view shows, as a server's, reports where they are
+// now, in cells, with an empty Rect.
+func (t *Terminal) AppPlacements() []AppPlacement {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	v := t.v
+	if v == nil {
+		var out []AppPlacement
+		if r := t.opts.AppImages; r.Last > 0 && t.term != nil {
+			t.term.Placements(func(pl vt.Placement) {
+				if !pl.Virtual && pl.ImageID >= r.First && pl.ImageID <= r.Last {
+					out = append(out, appPlacement(pl, 0, 0, 0, 0))
+				}
+			})
+		}
+		return out
+	}
+	if v.scale == 0 || v.cellW == 0 {
+		return nil
+	}
+	cw, ch := float32(v.cellW)/v.scale, float32(v.cellH)/v.scale
+	out := make([]AppPlacement, 0, len(v.app))
+	for _, pl := range v.app {
+		out = append(out, appPlacement(pl, float32(v.ox)/v.scale, float32(v.oy)/v.scale, cw, ch))
+	}
+	return out
+}
+
+// appPlacement is pl as AppPlacements reports it, its rectangle from
+// the view's origin ox, oy and its cells' size cw, ch.
+func appPlacement(pl vt.Placement, ox, oy, cw, ch float32) AppPlacement {
+	cols, rows := pl.ParamCols, pl.ParamRows
+	if pl.Cols > 0 {
+		cols, rows = pl.Cols, pl.Rows
+	}
+	return AppPlacement{
+		Image: pl.ImageID, ID: pl.ID, Visible: pl.Visible, Col: pl.Col, Row: pl.Row, Cols: cols, Rows: rows,
+		Rect: ui.Rect{X: ox + float32(pl.Col)*cw, Y: oy + float32(pl.Row)*ch, W: float32(cols) * cw, H: float32(rows) * ch},
+	}
+}
+
+// Cursor returns the cell the cursor is on, its column and its row from
+// the top of the screen.
+func (t *Terminal) Cursor() (col, row int) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.term == nil {
+		return 0, 0
+	}
+	return t.term.Cursor()
+}
+
+// Scroll takes a scroll event over something the app draws over the
+// view, at a placement of its own say, as the view takes one over its
+// cells: the scrollback scrolls, or the program gets the wheel, or the
+// zoom modifier zooms. The event's X and Y are relative to the view. It
+// reports whether the event was taken, which it is not while no view
+// shows the terminal: an element's HandleInput passes it the scroll
+// events it gets.
+func (t *Terminal) Scroll(ev ui.InputEvent) bool {
+	t.mu.Lock()
+	v := t.v
+	t.mu.Unlock()
+	if v == nil || ev.Kind != ui.InputScroll {
+		return false
+	}
+	return v.scroll(ev)
+}
+
+// ScrollRows scrolls the scrollback by n rows, up when negative, as
+// Shift+Page Up does by a page, and ScrollToTop and ScrollToBottom to
+// its ends, for an app that scrolls the terminal from code, as for keys
+// of its own; unlike Scroll, a program taking the mouse does not get
+// them as the wheel. They report whether they scrolled: a full-screen
+// program's screen has no scrollback.
+func (t *Terminal) ScrollRows(n int) bool {
+	return t.scrollBack(func(term *vt.Terminal) { term.ScrollBy(n) })
+}
+
+func (t *Terminal) ScrollToTop() bool { return t.scrollBack((*vt.Terminal).ScrollToTop) }
+
+func (t *Terminal) ScrollToBottom() bool { return t.scrollBack((*vt.Terminal).ScrollToBottom) }
+
+// AtBottom reports whether the view shows the end of the terminal, its
+// screen, rather than the scrollback above it, as of the last paint, as
+// AppPlacements places the images: an app drawing at them knows whether
+// what follows them is in sight. A terminal no view shows reports where
+// it is now.
+func (t *Terminal) AtBottom() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if v := t.v; v != nil && v.scrollbar.Len > 0 {
+		return v.scrollbar.Offset+v.scrollbar.Len >= v.scrollbar.Total
+	}
+	return t.term == nil || t.term.AtBottom()
+}
+
+// LinesBelow returns how many rows of the terminal are below its view:
+// those a scroll to the bottom brings into sight, 0 at the bottom. It
+// tells where the viewport is now, not as of the last paint, so that it
+// is 0 as soon as ScrollToBottom returns, while a glide may still show
+// the rows above.
+func (t *Terminal) LinesBelow() int {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.term == nil {
+		return 0
+	}
+	sb := t.term.Scrollbar()
+	return int(max(int64(sb.Total)-int64(sb.Offset)-int64(sb.Len), 0))
+}
+
+// scrollBack scrolls the scrollback with fn, but for a full-screen
+// program's screen, and reports whether it did.
+func (t *Terminal) scrollBack(fn func(*vt.Terminal)) bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.term == nil || t.term.AltScreen() {
+		return false
+	}
+	fn(t.term)
+	if v := t.v; v != nil {
+		v.services.Invalidate()
+	}
+	return true
 }
 
 // linkUnder is the link a click with mods at (x, y) opens, whether it is

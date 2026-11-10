@@ -42,6 +42,7 @@ func (v *view) readImages(term *vt.Terminal) {
 	for _, c := range v.bitmaps {
 		c.seen = false
 	}
+	v.app = v.app[:0]
 	term.Placements(func(pl vt.Placement) {
 		if pl.Virtual {
 			bmp := v.bitmap(term, pl.ImageID)
@@ -56,6 +57,11 @@ func (v *view) readImages(term *vt.Terminal) {
 				id: pl.ID, bmp: bmp, imgW: w, imgH: h,
 				cols: pl.ParamCols, rows: pl.ParamRows, layer: layerOf(pl.Z),
 			})
+			return
+		}
+		if r := v.t.opts.AppImages; r.Last > 0 && pl.ImageID >= r.First && pl.ImageID <= r.Last {
+			// The app's: not drawn, reported (AppPlacements).
+			v.app = append(v.app, pl)
 			return
 		}
 		if !pl.Visible || pl.Width <= 0 || pl.Height <= 0 || pl.SrcW <= 0 || pl.SrcH <= 0 {
