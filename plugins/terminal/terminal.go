@@ -132,8 +132,13 @@ type Options struct {
 	Cursor  CursorStyle
 	NoBlink bool
 	// Scrollback is about how many bytes of output the terminal keeps above
-	// the screen: 10 MB when zero, none when negative.
-	Scrollback int
+	// the screen: 10 MB when zero, none when negative. ScrollbackLines,
+	// when above zero, takes its place: about how many lines the terminal
+	// keeps above the screen, however wide it is (a line of a wider
+	// terminal takes more bytes), give or take the lines of a page of the
+	// library's, which it drops whole.
+	Scrollback      int
+	ScrollbackLines int
 	// ScrollMultiplier scales how far the wheel and the touchpad scroll, as
 	// Ghostty's mouse-scroll-multiplier. SetScrollMultiplier changes it.
 	ScrollMultiplier ScrollMultiplier
@@ -146,6 +151,13 @@ type Options struct {
 	// primary, the selection clipboard of Linux, is not there: ui has
 	// none. SetCopyOnSelect changes it.
 	CopyOnSelect CopyOnSelect
+	// NoCompression keeps the scrollback uncompressed. Otherwise, each
+	// time the terminal has been idle a moment, it compresses the
+	// scrollback out of sight, as Ghostty does, where the system lets it
+	// (macOS, 64-bit Linux and Windows): 70 to 90 per cent less memory
+	// for text.
+	// SetCompression changes it.
+	NoCompression bool
 	// Keybinds bind keys to actions over DefaultKeybinds, as Ghostty's
 	// keybind option: a binding replaces the defaults of its key and
 	// modifiers, and one to ActionNone unbinds them, so that the program
@@ -652,6 +664,8 @@ func New(opts Options) (*Terminal, error) {
 	// emoji with modifiers and joined emoji take two.
 	t.term.SetModeDefault(vt.ModeGraphemes, true)
 	switch {
+	case opts.ScrollbackLines > 0:
+		t.term.SetScrollbackLines(opts.ScrollbackLines)
 	case opts.Scrollback < 0:
 		t.term.SetScrollback(0)
 	case opts.Scrollback > 0:
@@ -667,6 +681,7 @@ func New(opts Options) (*Terminal, error) {
 	// Programs asking the colors before a view shows the terminal, or in
 	// one no view shows, get the theme asked for.
 	t.UseTheme(opts.Theme)
+	go t.compressIdle()
 	if opts.Conn != nil {
 		t.src = opts.Conn
 		t.quoting = quotingFor(runtime.GOOS, "")
@@ -678,8 +693,12 @@ func New(opts Options) (*Terminal, error) {
 	}
 	path, args, err := command(opts.Command)
 	if err != nil {
+		// The compressor sees no emulator, and ends.
+		t.mu.Lock()
 		t.rs.Free()
 		t.term.Free()
+		t.term = nil
+		t.mu.Unlock()
 		return nil, err
 	}
 	t.quoting = quotingFor(runtime.GOOS, path)
@@ -994,6 +1013,66 @@ func (t *Terminal) SetScrollMultiplier(m ScrollMultiplier) {
 	t.mu.Lock()
 	t.opts.ScrollMultiplier = m
 	t.mu.Unlock()
+}
+
+// SetCompression changes whether the terminal compresses its scrollback
+// when idle, as Options.NoCompression, as when the user changes a
+// setting. Compressed scrollback stays so until it is read.
+func (t *Terminal) SetCompression(on bool) {
+	t.mu.Lock()
+	t.opts.NoCompression = !on
+	t.mu.Unlock()
+}
+
+// compressAfter is how long a terminal is idle before it compresses its
+// scrollback, Ghostty's.
+const compressAfter = 250 * time.Millisecond
+
+// compressIdle compresses the scrollback once the terminal has been idle
+// compressAfter, until it is all compressed, a bounded step at a time
+// under the lock, so that output and frames wait little; again after the
+// next activity. It ends with the terminal, or at once where the system
+// cannot compress.
+func (t *Terminal) compressIdle() {
+	tick := time.NewTicker(compressAfter)
+	defer tick.Stop()
+	var last uint64
+	done := false
+	for range tick.C {
+		t.mu.Lock()
+		if t.term == nil {
+			t.mu.Unlock()
+			return
+		}
+		act, off := t.term.Activity(), t.opts.NoCompression
+		t.mu.Unlock()
+		if act != last {
+			last, done = act, false
+			continue
+		}
+		if done || off {
+			continue
+		}
+		for {
+			t.mu.Lock()
+			if t.term == nil {
+				t.mu.Unlock()
+				return
+			}
+			r := t.term.Compress()
+			if r != vt.CompressionPending {
+				last = t.term.Activity()
+			}
+			t.mu.Unlock()
+			if r == vt.CompressionUnsupported {
+				return
+			}
+			if r != vt.CompressionPending {
+				done = true
+				break
+			}
+		}
+	}
 }
 
 // SetMinimumContrast changes the least contrast of text with its

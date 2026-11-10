@@ -185,7 +185,17 @@ term, err := terminal.New(terminal.Options{
   (OSC 4, 10, 11, 12).
 - `Cursor` and `NoBlink` set the cursor, which programs may change.
 - `Scrollback` is about how many bytes of output to keep above the
-  screen: 10 MB by default, none when negative.
+  screen: 10 MB by default, none when negative. `ScrollbackLines`, when
+  set, takes its place: about how many lines to keep, however wide the
+  terminal is (a line of a wide terminal takes more bytes). The terminal
+  drops whole pages of its oldest lines, so it keeps between that number
+  less a page's lines (a few hundred at 80 columns, fewer when wider) and
+  that number.
+- The scrollback is compressed out of sight each time the terminal has
+  been idle a moment, as Ghostty does, where the system lets it (macOS,
+  64-bit Linux and Windows): 70 to 90 per cent less memory for text.
+  `NoCompression` keeps it uncompressed, and `SetCompression` changes it
+  in a running terminal.
 - `ScrollMultiplier` scales scrolling, as Ghostty's
   `mouse-scroll-multiplier`: `Discrete` is the rows a notch of a mouse
   wheel scrolls (3 by default; on Windows it scales the "lines to scroll"
@@ -588,6 +598,7 @@ term, err := terminal.New(terminal.Options{Conn: session})
 
 A terminal whose `Conn` never sends anything shows what the app writes
 with `Feed`, as a log with colors would.
+
 
 ## A server's terminal, shown elsewhere
 

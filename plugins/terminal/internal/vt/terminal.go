@@ -134,6 +134,7 @@ const (
 	optClipboardWrite      = 26
 	optClipboardRead       = 38
 	optScrollbackMaxBytes  = 27
+	optScrollbackMaxLines  = 28
 	optDesktopNotification = 29
 	optProgressReport      = 30
 	optModeDefault         = 33
@@ -156,6 +157,7 @@ const (
 	dataViewportActive = 32
 	dataMode           = 37
 	dataMouseShape     = 41
+	dataMemoryUsage    = 42
 )
 
 // NewTerminal makes a terminal of cols columns and rows rows.
@@ -276,6 +278,15 @@ func (t *Terminal) SetColors(fg, bg RGB, cursor *RGB, palette *[256]RGB) {
 func (t *Terminal) SetScrollback(n int) {
 	v := uintptr(max(n, 0))
 	t.set(optScrollbackMaxBytes, unsafe.Pointer(&v))
+}
+
+// SetScrollbackLines limits the scrollback to about n lines, at any
+// width, and lifts the limit in bytes: the library drops whole pages of
+// the oldest lines, so it keeps between n less a page's lines and n.
+func (t *Terminal) SetScrollbackLines(n int) {
+	v := uintptr(max(n, 0))
+	t.set(optScrollbackMaxLines, unsafe.Pointer(&v))
+	t.set(optScrollbackMaxBytes, nil)
 }
 
 // SetTerminfoName sets the name of the terminfo entry the terminal reports
@@ -642,14 +653,28 @@ func (t *Terminal) padRows(b []byte) []byte {
 	return slices.Concat(b[:end], bytes.Repeat([]byte("\r\n"), pad), b[end:])
 }
 
-// Compress compresses some of the scrollback, as when the terminal is
-// idle, and reports whether more is left to compress.
-func (t *Terminal) Compress() bool {
+// Compression is what Compress reports.
+type Compression int
+
+const (
+	// CompressionUnsupported: the system cannot free the memory of a
+	// compressed page while keeping its place, so nothing is compressed.
+	CompressionUnsupported Compression = iota
+	// CompressionPending: more is left to compress.
+	CompressionPending
+	// CompressionComplete: the pass is done until Activity changes.
+	CompressionComplete
+)
+
+// Compress compresses some of the scrollback, a bounded step, as when the
+// terminal is idle, and reports whether more is left. It is not safe with
+// other use of the terminal.
+func (t *Terminal) Compress() Compression {
 	var r int32
 	if !ok(call(fnTerminalCompress, t.h, 0, uintptr(unsafe.Pointer(&r)))) {
-		return false
+		return CompressionComplete
 	}
-	return r == 1
+	return Compression(r)
 }
 
 // Activity returns a token that changes when the scrollback may compress.
@@ -657,6 +682,30 @@ func (t *Terminal) Activity() uint64 {
 	var v uint64
 	call(fnTerminalCompressionActivity, t.h, uintptr(unsafe.Pointer(&v)))
 	return v
+}
+
+// MemoryUsage is the memory of a terminal's screens, their pages', as
+// libghostty-vt counts it: resident is what they hold now, a compressed
+// page counted at its compressed size, virtual the address space kept
+// for them. Images are counted apart.
+type MemoryUsage struct {
+	size                 uintptr
+	CompressionSupported bool
+
+	// The primary screen's, which holds the scrollback.
+	PrimaryPages, PrimaryVirtual, PrimaryResident                     uint64
+	PrimaryCompressedPages, PrimaryCompressedBytes, PrimaryImageBytes uint64
+
+	// The alternate screen's, a full-screen program's.
+	AlternatePages, AlternateVirtual, AlternateResident                     uint64
+	AlternateCompressedPages, AlternateCompressedBytes, AlternateImageBytes uint64
+}
+
+// MemoryUsage returns the memory the terminal's screens hold.
+func (t *Terminal) MemoryUsage() MemoryUsage {
+	m := MemoryUsage{size: unsafe.Sizeof(MemoryUsage{})}
+	t.get(dataMemoryUsage, unsafe.Pointer(&m))
+	return m
 }
 
 func clamp16(v int) int { return max(1, min(v, 0xFFFF)) }

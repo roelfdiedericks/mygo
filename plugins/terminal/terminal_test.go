@@ -235,6 +235,29 @@ func TestScrollback(t *testing.T) {
 	}
 }
 
+// ScrollbackLines keeps about that many lines however wide the terminal
+// is: whole pages of the oldest go, so it keeps between the number less a
+// page's lines and the number. 10 MB, the default in bytes, would keep
+// about 2,900 rows at 400 columns.
+func TestScrollbackLines(t *testing.T) {
+	loadLib(t)
+	for _, cols := range []int{80, 400} {
+		term, err := New(Options{Conn: newPipe(), ScrollbackLines: 5000})
+		if err != nil {
+			t.Fatal(err)
+		}
+		term.ResizePixels(cols, 24, 8, 16)
+		term.Feed([]byte(strings.Repeat("x\r\n", 20000)))
+		term.mu.Lock()
+		n := term.term.ScrollbackRows()
+		term.mu.Unlock()
+		term.Close()
+		if n < 4000 || n > 5000 {
+			t.Errorf("%d columns: %d lines kept, want about 5000", cols, n)
+		}
+	}
+}
+
 // TestScrollbarDrag: the scroll bar shows while the pointer is over the
 // terminal, as the code editor's does, and goes as it leaves; over its
 // strip the pointer is the arrow rather than the I-beam. It drags the
@@ -3127,5 +3150,51 @@ func TestOnDrop(t *testing.T) {
 	tt.Frame()
 	if s := conn.take(term); !strings.Contains(s, "b.txt") {
 		t.Errorf("a drop OnDrop left pasted %q", s)
+	}
+}
+
+// A terminal compresses its scrollback once it has been idle, where the
+// system can (macOS, 64-bit Linux and Windows), and not with NoCompression.
+func TestCompressWhenIdle(t *testing.T) {
+	loadLib(t)
+	var b strings.Builder
+	for i := range 30000 {
+		fmt.Fprintf(&b, "line %d of the output of some command\r\n", i)
+	}
+	for _, off := range []bool{false, true} {
+		term, err := New(Options{Conn: newPipe(), ScrollbackLines: 100000, NoCompression: off})
+		if err != nil {
+			t.Fatal(err)
+		}
+		term.ResizePixels(80, 24, 8, 16)
+		term.Feed([]byte(b.String()))
+		usage := func() vt.MemoryUsage {
+			term.mu.Lock()
+			defer term.mu.Unlock()
+			return term.term.MemoryUsage()
+		}
+		u := usage()
+		if u.PrimaryPages == 0 || u.PrimaryResident == 0 {
+			t.Fatalf("memory usage read nothing: %+v", u)
+		}
+		if !u.CompressionSupported {
+			term.Close()
+			t.Skip("this system cannot compress scrollback")
+		}
+		wait := 5 * time.Second
+		if off {
+			wait = time.Second
+		}
+		for deadline := time.Now().Add(wait); usage().PrimaryCompressedPages == 0 && time.Now().Before(deadline); {
+			time.Sleep(50 * time.Millisecond)
+		}
+		u = usage()
+		switch {
+		case off && u.PrimaryCompressedPages != 0:
+			t.Errorf("compressed %d pages with NoCompression", u.PrimaryCompressedPages)
+		case !off && (u.PrimaryCompressedPages == 0 || u.PrimaryResident >= u.PrimaryVirtual):
+			t.Errorf("idle scrollback not compressed: %+v", u)
+		}
+		term.Close()
 	}
 }
