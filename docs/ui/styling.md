@@ -270,7 +270,8 @@ trees, are multiples of it. It is 4 by default; 3 makes every widget
 compact, 5 roomy. `FontSize` sizes their text, `Radius` rounds their
 corners, and `Scrollbar` and `ScrollbarWidth` color and size scroll bar
 thumbs, which `ScrollbarStyle` styles further: tracks, hover and drag
-colors, widths, corners and the shortest thumb. On macOS,
+colors, widths, corners and the shortest thumb. `ScrollbarsAlways` keeps
+them showing (see [Scroll bars](scroll.md#scroll-bars)). On macOS,
 rounded corners, the widgets' and your elements', curve continuously as
 AppKit's and SwiftUI's do, and elsewhere as quarter circles, as Windows
 and GTK draw them. Size your own

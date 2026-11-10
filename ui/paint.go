@@ -1435,9 +1435,10 @@ func (p *Painter) scrollbars(e *node) {
 	}
 	dragging := rt.scrollDrag.st == st
 	// A press takes the bars only where the window shows them
-	// (scrollbarPress). Kept, they show as on hover, so that the pointer
-	// coming over changes nothing.
-	hide, keep := st.barFlags == 0, st.barFlags&keepBarsVisible != 0
+	// (scrollbarPress). Kept, by the container or the theme's
+	// ScrollbarsAlways, they show as on hover, so that the pointer coming
+	// over changes nothing.
+	hide, keep := st.barFlags == 0, st.barFlags&keepBarsVisible != 0 || p.Theme().ScrollbarsAlways
 	if !hide && !keep {
 		// The bars show on hover (hoverNeeds).
 		st.hoverLook = true

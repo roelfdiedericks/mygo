@@ -336,6 +336,34 @@ func TestScrollbarDrag(t *testing.T) {
 	}
 }
 
+// With the theme's ScrollbarsAlways, the scroll bar shows with the pointer
+// away from the terminal, while there is a scrollback.
+func TestScrollbarsAlways(t *testing.T) {
+	loadLib(t)
+	for _, always := range []bool{false, true} {
+		term, err := New(Options{Conn: newPipe()})
+		if err != nil {
+			t.Fatal(err)
+		}
+		tt := ui.NewTester(func(c *ui.Context) {
+			th := *c.Theme()
+			th.ScrollbarsAlways = always
+			c.SetTheme(&th)
+			View(c, term).Fill()
+		}, 400, 200)
+		term.Feed([]byte(strings.Repeat("line\r\n", 100)))
+		tt.Move(-20, -20)
+		tt.Frame()
+		img := tt.Image()
+		s := img.Bounds().Dx() / 400
+		// At the bottom, the thumb is at the bottom of the bar's strip.
+		if shows := img.RGBAAt(395*s, 188*s) != img.RGBAAt(380*s, 188*s); shows != always {
+			t.Errorf("ScrollbarsAlways %v: the bar shows %v with the pointer away", always, shows)
+		}
+		term.Close()
+	}
+}
+
 // A match that wraps from a row above the viewport shows on the rows of it
 // that the viewport shows.
 func TestSearchWrappedMatch(t *testing.T) {

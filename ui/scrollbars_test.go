@@ -533,3 +533,37 @@ func TestScrollbarInCachedLayer(t *testing.T) {
 		})
 	}
 }
+
+// With the theme's ScrollbarsAlways, a container whose content overflows
+// shows its bar with the pointer elsewhere, and a first press on its
+// track pages; Scrollbars(false) still hides it.
+func TestScrollbarsAlways(t *testing.T) {
+	for _, hidden := range []bool{false, true} {
+		var sc *node
+		tt := coreNewTester(func(c *context) {
+			th := *c.Theme()
+			th.ScrollbarsAlways = true
+			c.SetTheme(&th)
+			coreRow(c).Children(func() {
+				sc = coreScroll(c).Size(100, 200).Scrollbars(!hidden).Children(func() { coreBox(c).Size(100, 800) })
+			})
+		}, 300, 200)
+		tt.Move(250, 150)
+		tt.Frame()
+		st := sc.st
+		if st.barsShown == hidden {
+			t.Errorf("Scrollbars(%v): shown %v with the pointer elsewhere", !hidden, st.barsShown)
+		}
+		if !hidden {
+			g := scrollBars(Rect{st.x, st.y, st.w, st.h}, st.barInset, float32(st.contentW), float32(st.contentH), 0, 0, st.flags, ScrollbarStyle{}.Resolve(tt.rt.c.theme), false)
+			x, y := g.vTrack.X+g.vTrack.W/2, g.v.Y+g.v.H+20
+			tt.Press(x, y)
+			tt.Release(x, y)
+			tt.Frame()
+			if st.scrollY == 0 {
+				t.Error("a first press on the track did not page")
+			}
+		}
+		tt.rt.close()
+	}
+}

@@ -301,6 +301,12 @@ All three apply to `Scroll`, `ScrollHorizontal`, `ScrollBoth`, `List` and
 ui.List(c, &app.rows, len(app.lines), app.line).Fill().KeepScrollbars(true)
 ```
 
+The theme's `ScrollbarsAlways` keeps every container's bars showing, as
+`KeepScrollbars(true)` does for one, and those of the code editor, rich
+text and the terminal too: for an app that follows macOS's "Always show
+scroll bars", or offers it as a setting. `Scrollbars(false)` still hides
+a container's.
+
 An element that scrolls itself rather than through a container, as the
 code editor and the terminal do, draws its bars with `ui.Scrollbar`, so
 that they look as the containers' do and follow the theme: `Painter.Scrollbar`

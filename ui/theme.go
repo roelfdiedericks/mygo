@@ -67,6 +67,13 @@ type Theme struct {
 	Scrollbar      Color
 	ScrollbarWidth float32
 	ScrollbarStyle ScrollbarStyle
+	// ScrollbarsAlways keeps scroll bars showing while what they scroll
+	// overflows, as macOS's "Always show scroll bars" does, rather than
+	// while the pointer is over the view or drags a thumb: KeepScrollbars
+	// for every scroll container, and the bars of the code editor, rich
+	// text and the terminal too. Scrollbars(false) still hides a
+	// container's.
+	ScrollbarsAlways bool
 	// Radius rounds the corners of controls.
 	Radius float32
 	// Spacing is the unit of the room widgets leave inside and between
