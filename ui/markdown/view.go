@@ -59,6 +59,14 @@ type Options struct {
 	// builds, so it looks up what the app has at hand, as in a map, and
 	// paragraphs follow when its answers change.
 	Resolve func(in parser.Inline) (dest string, ok bool)
+	// CodeLink, when set, makes code within text a link: it returns where
+	// the code goes, which OnLink, or else the router or a ui.Link, opens,
+	// or false to leave it code, as a reader of an agent's replies does to
+	// make the files they name (`main.go`) open. Without it, code is code.
+	// It is asked for each one shown whenever the view builds, so it looks
+	// up what the app has at hand, as in a map, and paragraphs follow when
+	// its answers change.
+	CodeLink func(code string) (dest string, ok bool)
 	// Preview, when set, returns what shows while the pointer rests on a
 	// link to dest, a mention's or a reference's included: a function
 	// filling the tip, as ui.TooltipBase does, or nil for the address
@@ -552,14 +560,30 @@ func (st *viewState) para(i int, base spanStyle) *para {
 	sb.math = st.o.InlineMath
 	sb.linkIcon = st.o.LinkIcon
 	sb.resolve = st.o.Resolve
+	sb.codeLink = st.o.CodeLink
 	sb.build(&pc.p, base)
 	return &pc.p
 }
 
 // sameResolved reports whether the mentions and references of block i
-// resolve where they did as p was built, Options.Resolve set or not
-// alike.
+// resolve where they did as p was built, and its code links where they
+// did, Options.Resolve and Options.CodeLink set or not alike.
 func (st *viewState) sameResolved(i int, p *para) bool {
+	if (st.o.CodeLink != nil) != p.withCodeLink {
+		return false
+	}
+	if st.o.CodeLink != nil {
+		in := st.doc.Inlines(i)
+		for k, x := range p.codes {
+			dest, ok := st.o.CodeLink(in[x].Text)
+			if !ok {
+				dest = ""
+			}
+			if dest != p.codeDests[k] {
+				return false
+			}
+		}
+	}
 	if len(p.refs) == 0 {
 		return true
 	}

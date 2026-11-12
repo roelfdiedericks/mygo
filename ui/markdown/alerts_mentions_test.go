@@ -92,6 +92,52 @@ func TestViewMentions(t *testing.T) {
 	}
 }
 
+// Code within text is a link where CodeLink says so, to where it says,
+// and code where it says not; it follows CodeLink's answers as they
+// change, and is code again without it, or in a link of its own.
+func TestViewCodeLink(t *testing.T) {
+	files := map[string]bool{"main.go": true}
+	var opened []string
+	o := &Options{
+		CodeLink: func(code string) (string, bool) {
+			if files[code] {
+				return "file:///src/" + code, true
+			}
+			return "", false
+		},
+		OnLink: func(url string) { opened = append(opened, url) },
+	}
+	src := "See `main.go` and `util.go`, and [the `docs`](https://example.com)."
+	tt := ui.NewTester(func(c *ui.Context) { View(c, src, o) }, 600, 400)
+	if err := tt.Click("main.go"); err != nil {
+		t.Fatalf("main.go: %v in %q", err, tt.Texts())
+	}
+	if !slices.Equal(opened, []string{"file:///src/main.go"}) {
+		t.Errorf("opened %q", opened)
+	}
+	// Code that is no file stays code.
+	if err := tt.Click("util.go"); err == nil {
+		t.Error("util.go is a link")
+	}
+	// Once it is a file, it links.
+	files["util.go"] = true
+	tt.Frame()
+	if err := tt.Click("util.go"); err != nil || opened[len(opened)-1] != "file:///src/util.go" {
+		t.Errorf("util.go once a file: %v, opened %q", err, opened)
+	}
+	// Code in a link is the link's, not one of its own.
+	n := len(opened)
+	if err := tt.Click("the docs"); err != nil || len(opened) != n+1 || opened[n] != "https://example.com" {
+		t.Errorf("the link's code: %v, opened %q in %q", err, opened, tt.Texts())
+	}
+	// Without CodeLink, code is code.
+	o.CodeLink = nil
+	tt.Frame()
+	if err := tt.Click("main.go"); err == nil {
+		t.Error("main.go is still a link once CodeLink is cleared")
+	}
+}
+
 func TestViewPreview(t *testing.T) {
 	r := &resolver{known: []string{"octocat"}}
 	var asked []string

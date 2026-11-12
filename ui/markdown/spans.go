@@ -49,9 +49,14 @@ type para struct {
 	// refs are the inlines of its mentions and references, and resolved
 	// where each went, "" for those left text, as Options.Resolve, when
 	// withResolve, answered: it builds anew when it answers otherwise.
-	refs        []int
-	resolved    []string
-	withResolve bool
+	// codes and codeDests are the same of its code, as Options.CodeLink,
+	// when withCodeLink, answered.
+	refs         []int
+	resolved     []string
+	withResolve  bool
+	codes        []int
+	codeDests    []string
+	withCodeLink bool
 	// width is the width of its text on one line, once measured.
 	width    float32
 	measured bool
@@ -90,13 +95,16 @@ type spanBuilder struct {
 	math func(tex string, size float32) (InlineObject, bool)
 	// linkIcon makes the objects at the start of links (Options.LinkIcon).
 	linkIcon func(dest string, size float32) (InlineObject, bool)
-	// resolve makes mentions and references links (Options.Resolve).
-	resolve func(in parser.Inline) (string, bool)
+	// resolve makes mentions and references links (Options.Resolve), and
+	// codeLink code (Options.CodeLink).
+	resolve  func(in parser.Inline) (string, bool)
+	codeLink func(code string) (string, bool)
 }
 
 // build makes the paragraph of block i, of base style s.
 func (sb *spanBuilder) build(p *para, base spanStyle) {
-	*p = para{pieces: p.pieces[:0], marks: p.marks[:0], refs: p.refs[:0], resolved: p.resolved[:0], withResolve: sb.resolve != nil}
+	*p = para{pieces: p.pieces[:0], marks: p.marks[:0], refs: p.refs[:0], resolved: p.resolved[:0], withResolve: sb.resolve != nil,
+		codes: p.codes[:0], codeDests: p.codeDests[:0], withCodeLink: sb.codeLink != nil}
 	sb.p = p
 	sb.in = sb.d.Inlines(sb.block)
 	sb.html = sb.html[:0]
@@ -316,7 +324,22 @@ func (sb *spanBuilder) inlines(from, to int, s spanStyle) {
 			if z-a == len(n.Text)+2 && sb.d.Source()[a] == ' ' {
 				a++
 			}
-			sb.add(n.Text, a, min(a+len(n.Text), z), z-a == len(n.Text), cs, link)
+			// Code Options.CodeLink makes a link, but in a link already.
+			dest := ""
+			if sb.codeLink != nil && !s.inLink {
+				if d, ok := sb.codeLink(n.Text); ok {
+					dest = d
+				}
+				sb.p.codes = append(sb.p.codes, k)
+				sb.p.codeDests = append(sb.p.codeDests, dest)
+			}
+			if dest == "" {
+				sb.add(n.Text, a, min(a+len(n.Text), z), z-a == len(n.Text), cs, link)
+				continue
+			}
+			cs.inLink, cs.color = true, Color{}
+			sb.add(n.Text, a, min(a+len(n.Text), z), z-a == len(n.Text), cs, k)
+			sb.cur.dest = dest
 		case parser.Emphasis:
 			cs := s
 			cs.italic = true
