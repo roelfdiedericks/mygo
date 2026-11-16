@@ -295,7 +295,10 @@ the window. They look as they do on hover, on the track if the style has
 one, so nothing changes as the pointer comes over them, and take presses
 as they do then; `Scrollbars(false)` and `ScrollbarAxes` still hide them.
 All three apply to `Scroll`, `ScrollHorizontal`, `ScrollBoth`, `List` and
-`Table`, are left at their defaults by leaving them out, and are not inherited:
+`Table`, are left at their defaults by leaving them out, and are not inherited.
+The theme's `ScrollbarsAlways` keeps the bars of every container showing
+so, and those of the code editor, rich text and the terminal, as macOS's
+"Always" setting does:
 
 ```go
 ui.List(c, &app.rows, len(app.lines), app.line).Fill().KeepScrollbars(true)

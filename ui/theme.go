@@ -68,9 +68,15 @@ type Theme struct {
 	// them where it sets a field. It styles their tracks, hover and drag
 	// colors, the width of their bars and thumbs, their corners and
 	// shortest thumb; a theme that sets neither draws as it always has.
-	Scrollbar      Color
-	ScrollbarWidth float32
-	ScrollbarStyle ScrollbarStyle
+	// ScrollbarsAlways shows the bars while what they scroll overflows,
+	// as macOS's "Always" does, rather than while the pointer is over the
+	// view or drags a thumb: as KeepScrollbars does for one container, for
+	// every scroll container, and for the code editor, rich text and the
+	// terminal.
+	Scrollbar        Color
+	ScrollbarWidth   float32
+	ScrollbarStyle   ScrollbarStyle
+	ScrollbarsAlways bool
 	// Radius rounds the corners of controls.
 	Radius float32
 	// Spacing is the unit of the room widgets leave inside and between

@@ -127,7 +127,12 @@ The terminal does what terminal apps do:
 - **Scrolling**: the wheel and the touchpad scroll the scrollback, as do
   Shift+Page Up and Shift+Page Down. Full-screen programs get the wheel as
   arrow keys, or as mouse reports when they take the mouse. Typing scrolls
-  back to the bottom.
+  back to the bottom. The scroll bar, styled by the theme as a scroll
+  container's, shows with the pointer over the view, whatever the app
+  draws over it, while the view is up from the bottom, and always with
+  the theme's `ScrollbarsAlways`. `ScrollbarStrip` tells how wide the
+  strip at the view's right edge is where the bar takes the pointer,
+  which what the app draws over the view can leave clear.
 - **Zooming**: the wheel with Control held (Command on macOS), and
   Control (Command) with =, - and 0 make the text larger, smaller, and its
   size again, a DIP a step, as in Ghostty; `OnZoom` takes zooms instead.

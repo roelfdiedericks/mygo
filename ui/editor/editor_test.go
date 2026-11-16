@@ -1181,3 +1181,32 @@ func TestHeightsZeroValue(t *testing.T) {
 		t.Fatalf("lineAt of the zero heights = %d, want 0", got)
 	}
 }
+
+// The theme's ScrollbarsAlways shows the editor's thumb with the pointer
+// away, as KeepScrollbars does.
+func TestCodeEditorScrollbarsAlways(t *testing.T) {
+	shot := func(always bool) []uint32 {
+		st := &State{Buffer: NewBuffer(strings.Repeat("line\n", 200))}
+		tt := ui.NewTester(func(c *ui.Context) {
+			th := *c.Theme()
+			th.ScrollbarsAlways = always
+			c.SetTheme(&th)
+			View(c, st).Fill()
+		}, 600, 400)
+		tt.Move(-10, -10)
+		tt.Frame()
+		img := tt.Image()
+		s := img.Bounds().Dx() / 600
+		var px []uint32
+		for y := 0; y < 400*s; y++ {
+			for x := (600 - scrollbarWidth) * s; x < 600*s; x++ {
+				c := img.RGBAAt(x, y)
+				px = append(px, uint32(c.R)<<24|uint32(c.G)<<16|uint32(c.B)<<8|uint32(c.A))
+			}
+		}
+		return px
+	}
+	if slices.Equal(shot(true), shot(false)) {
+		t.Fatal("the theme's ScrollbarsAlways doesn't show the thumb with the pointer away")
+	}
+}

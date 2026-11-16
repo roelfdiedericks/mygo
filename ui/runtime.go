@@ -1689,7 +1689,7 @@ func (rt *engine) commitElement(e *node, clip Rect, hidden bool) {
 		} else {
 			barFlags &^= source.hiddenScrollbars
 		}
-		if barFlags != 0 && source.keepScrollbars {
+		if barFlags != 0 && (source.keepScrollbars || e.theme().ScrollbarsAlways) {
 			barFlags |= keepBarsVisible
 		}
 		if s.barStyle == nil {
