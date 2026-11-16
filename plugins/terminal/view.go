@@ -218,7 +218,8 @@ type view struct {
 	// barHeld tells that the primary button drags the scroll bar, held
 	// barGrab DIPs below the thumb's top; overBar that the pointer is over
 	// the bar, as of its last move, and barHover as of the last build;
-	// inView that the pointer was over the terminal, which shows the bar.
+	// inView that the pointer was over the terminal's box, under what an
+	// app draws over it too, which shows the bar.
 	barHeld, overBar, barHover, inView bool
 	// barStyle is how the scroll bar looks, the theme's as of the last
 	// paint.
@@ -325,7 +326,9 @@ func (v *view) build(c *ui.Context, e ui.Element) {
 			v.hoverLink, v.hoverPath, v.hover = v.linkUnder(c.Modifiers(), v.pointer[0], v.pointer[1])
 		}
 		v.pointerAt = v.pointerShape(t.term, c.Modifiers())
-		v.inView = e.Hovered()
+		// Over the view's box, whatever an app draws over it
+		// (AppPlacements): the scroll bar shows as over the text.
+		_, _, v.inView = e.PointerPosition()
 		v.barHover = v.inView && v.overScrollbar(v.pointer[0], v.pointer[1])
 		if v.barHover || v.barHeld {
 			v.pointerAt = ui.CursorDefault // the bar's, not the text's
@@ -1416,8 +1419,30 @@ func (v *view) linkUnder(mods ui.Modifiers, x, y float32) (link string, path boo
 }
 
 // scrollbarStrip is how wide the strip at the right edge is over which the
-// scroll bar takes the pointer, in DIPs.
+// scroll bar takes the pointer, in DIPs, before the theme's style is known.
 const scrollbarStrip = 12
+
+// strip is how wide the strip at the right edge is over which the scroll
+// bar takes the pointer, in DIPs: its style's track, as of the last paint.
+func (v *view) strip() float32 {
+	if w := v.barStyle.TrackWidth; w > 0 {
+		return w
+	}
+	return scrollbarStrip
+}
+
+// ScrollbarStrip returns how wide the strip at the view's right edge is
+// over which the scroll bar takes the pointer, in DIPs, by the window's
+// theme as the view's last frame read it: what an app draws over the view
+// leaves it clear to keep the bar in sight and in reach.
+func (t *Terminal) ScrollbarStrip() float32 {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.v == nil {
+		return scrollbarStrip
+	}
+	return t.v.strip()
+}
 
 // overScrollbar reports whether the scroll bar takes the pointer at (x, y):
 // over its strip while there is a scrollback, which shows the bar, or
@@ -1426,12 +1451,8 @@ func (v *view) overScrollbar(x, y float32) bool {
 	if v.barHeld {
 		return true
 	}
-	width := v.barStyle.TrackWidth
-	if width <= 0 {
-		width = scrollbarStrip
-	}
 	w, h := v.size[0], v.size[1]
-	if x < w-width || x >= w || y < 0 || y >= h {
+	if x < w-v.strip() || x >= w || y < 0 || y >= h {
 		return false
 	}
 	sb := v.t.term.Scrollbar()

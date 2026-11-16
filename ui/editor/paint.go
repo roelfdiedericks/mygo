@@ -938,9 +938,9 @@ func (ed *editor) paintScrollbars(p *ui.Painter, r ui.Rect, f *frame) {
 	vertical, horizontal := ed.scrollbars()
 	// The thumbs and the carets' marks show while the pointer is over the
 	// editor, or drags a thumb, as a scroll container's do, or always
-	// when kept (KeepScrollbars), looking the same; the marks of changes,
-	// matches and diagnostics always.
-	shown := ed.pointerIn || ed.scrollbar.active || ed.o.keepScrollbars
+	// when kept (KeepScrollbars, the theme's ScrollbarsAlways), looking
+	// the same; the marks of changes, matches and diagnostics always.
+	shown := ed.pointerIn || ed.scrollbar.active || ed.o.keepScrollbars || ed.o.barsAlways
 	if vertical {
 		width := ed.barWidth()
 		x := r.X + r.W - width

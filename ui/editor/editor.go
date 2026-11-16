@@ -69,9 +69,10 @@ type options struct {
 	noScrollbar bool
 	// keepScrollbars shows the thumbs with the pointer away, and
 	// hideScrollbars shows no bars, nor keeps their room (KeepScrollbars,
-	// NoScrollbars). scrollbar is how the bars look (Scrollbar).
-	keepScrollbars, hideScrollbars bool
-	scrollbar                      ui.ScrollbarStyle
+	// NoScrollbars); barsAlways is the window theme's ScrollbarsAlways,
+	// which keeps them too. scrollbar is how the bars look (Scrollbar).
+	keepScrollbars, hideScrollbars, barsAlways bool
+	scrollbar                                  ui.ScrollbarStyle
 	// minDigits is how many digits the gutter has room for at least.
 	minDigits int
 	// sharedScroll scrolls the sides of a split diff together.
@@ -308,6 +309,7 @@ func (ed *editor) init(buf *Buffer, o options, t *ui.Theme) {
 		style.TrackWidth = scrollbarWidth
 	}
 	ed.barStyle = style.Resolve(t)
+	ed.o.barsAlways = t != nil && t.ScrollbarsAlways
 	if o.hideScrollbars {
 		// Bars taken away while a thumb is dragged let it go, rather than
 		// scroll on under the pointer (NoScrollbars).

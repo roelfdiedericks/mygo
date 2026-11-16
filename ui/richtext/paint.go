@@ -29,8 +29,9 @@ func (v *view) paint(p *ui.Painter, r ui.Rect) {
 	b := v.border
 	p.Clip(ui.Rect{X: r.X + b, Y: r.Y + b, W: r.W - 2*b, H: r.H - 2*b}, max(v.radius-b, 0), func() { v.paintText(p, r, w) })
 	// The scroll bar while the pointer is over the editor or drags its
-	// thumb, as a scroll container's.
-	if !v.opts.NoScrollbar && (v.inView || v.thumb) {
+	// thumb, as a scroll container's, or always as the theme says
+	// (ScrollbarsAlways).
+	if !v.opts.NoScrollbar && (v.inView || v.thumb || p.Theme().ScrollbarsAlways) {
 		v.barStyle = ui.ScrollbarStyle{}.Resolve(p.Theme())
 		bar := v.bar()
 		bar.Box.X, bar.Box.Y = r.X, r.Y
