@@ -126,8 +126,12 @@ func (i Item) Read(format Format) ([]byte, error) {
 	return nil, ErrFormat
 }
 
-// Data is an immutable collection of items. Its zero value is empty.
-type Data struct{ items []Item }
+// Data is an immutable collection of items, and of virtual files a drag
+// offers (VirtualFiles). Its zero value is empty.
+type Data struct {
+	items   []Item
+	virtual []VirtualFile
+}
 
 // New makes data from items, preserving their order.
 func New(items ...Item) Data { return Data{items: slices.Clone(items)} }
@@ -178,7 +182,7 @@ func (d Data) Snapshot() Data {
 			items[n].reps = append(items[n].reps, Representation{r.format, v})
 		}
 	}
-	return New(items...)
+	return Data{items: items, virtual: slices.Clone(d.virtual)}
 }
 
 // Read reads a format for platforms with a single selection/data object.
