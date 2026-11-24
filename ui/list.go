@@ -6,6 +6,8 @@ import (
 	"runtime"
 	"slices"
 	"strings"
+
+	"github.com/egoist/mygo/transfer"
 )
 
 // A List builds only the rows in view, and keeps its place by a row, its
@@ -129,6 +131,14 @@ type ListState struct {
 	// itself takes nothing and shows no place between the rows. Return nil
 	// for rows that do not drag. A list cannot both DragRows and Reorder.
 	DragRows func(rows []int) any
+	// DragData, when set, lets the user drag rows out of the window, to
+	// other windows and applications, as Element.DragDataFrom does: the
+	// rows chosen, when the row dragged is one, else that row, which the
+	// list passes in order as the drag starts, offer the data DragData
+	// returns, as files of a file browser drag to a file manager. A row
+	// still is chosen by a click. Return empty data for rows that do not
+	// drag.
+	DragData func(rows []int) transfer.Data
 	// DragSelect, with Selection, chooses rows as the pointer drags over
 	// them from the row it pressed: those from that row to the one under
 	// the pointer, as a Shift-click on it would, and with Cmd (Ctrl on
@@ -598,8 +608,8 @@ func buildList(c *context, e, owner *node, s *ListState, n int, row func(i int),
 	if rt.listMenu == nil {
 		rt.listMenu, rt.listMenuKey, rt.listDrag = (*engine).chooseRowAt, (*engine).chosenRowMenu, (*engine).scrollDragSelect
 	}
-	if (s.DragSelect || s.CellSelect && flat) && (s.Reorder != nil || s.DragRows != nil) {
-		panic("ui: a list cannot both DragSelect (or CellSelect) and Reorder (or DragRows)")
+	if (s.DragSelect || s.CellSelect && flat) && (s.Reorder != nil || s.DragRows != nil || s.DragData != nil) {
+		panic("ui: a list cannot both DragSelect (or CellSelect) and Reorder (or DragRows, DragData)")
 	}
 	if s.Reorder != nil && s.DragRows != nil {
 		panic("ui: a list cannot both Reorder and DragRows")
@@ -889,6 +899,9 @@ func (f *listFrame) build(i int) *node {
 			// Where the row was, as it moves with the pointer.
 			w.Opacity(0.4)
 		}
+	}
+	if s.DragData != nil && !f.isHeader(i) {
+		w.DragDataFrom(func() transfer.Data { return s.DragData(f.dragged(i)) })
 	}
 	saved := c.row
 	c.row = rb

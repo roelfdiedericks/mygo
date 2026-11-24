@@ -304,3 +304,38 @@ func TestNativeDestinationRejectsMismatchDisabledAndFailedData(t *testing.T) {
 		t.Fatal("failed provider acknowledged a drop")
 	}
 }
+
+// TestListDragData: a click on a row of a list with DragData chooses it;
+// a press that moves starts a native drag of the data DragData makes of
+// the row dragged, asked as the drag starts.
+func TestListDragData(t *testing.T) {
+	items := []string{"a", "b", "c"}
+	sel := -1
+	var asked [][]int
+	s := ListState{
+		Selected: &sel,
+		DragData: func(rows []int) transfer.Data {
+			asked = append(asked, slices.Clone(rows))
+			return transfer.TextData(items[rows[0]])
+		},
+	}
+	tt := coreNewTester(func(c *context) {
+		coreList(c, &s, len(items), func(i int) {
+			coreRow(c).Padding(8).Children(func() { coreText(c, items[i]) })
+		}).Height(200)
+	}, 200, 200)
+	tt.Click("b")
+	if sel != 1 || len(asked) != 0 {
+		t.Fatalf("a click chose row %d and asked for data %v", sel, asked)
+	}
+	r, _ := tt.Find("c")
+	x, y := float32(r.X+4), float32(r.Y+r.H/2)
+	tt.Press(x, y)
+	tt.Move(x, y+12)
+	if len(asked) != 1 || !slices.Equal(asked[0], []int{2}) {
+		t.Fatalf("the drag asked for rows %v, want [2]", asked)
+	}
+	if b, _ := tt.h.dragData.Read(transfer.Text); string(b) != "c" {
+		t.Errorf("the drag offers %q, want c", b)
+	}
+}
