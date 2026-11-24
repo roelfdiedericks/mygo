@@ -136,6 +136,29 @@ are escaped as file URLs; the receiver's `Data.Files()` returns local
 paths, while `Data.URLs()` returns URI-list entries. `FileData` transfers
 existing paths; it does not create promised files or stream file contents.
 
+Files that are not on this machine's disk, as a remote host's, drag out
+with `transfer.VirtualFiles`: each has a relative `/`-separated path (a
+folder's entries follow it, `"docs"` then `"docs/a.md"`), a size and time,
+and an `Open` the destination calls, on any goroutine and possibly after
+the drag ended, for the bytes. The file manager chooses where they go and
+copies them with its own progress.
+
+```go
+row.DragDataFrom(func() transfer.Data {
+	data, _ := transfer.VirtualFiles(transfer.VirtualFile{
+		Path: "notes.md", Size: size, ModTime: mod,
+		Open: func() (io.ReadCloser, error) { return remote.Open(path) },
+	})
+	return data
+})
+```
+
+Windows offers them as Explorer's virtual files (`FileGroupDescriptorW`
+and `FileContents`), copied on Explorer's own thread
+(`IDataObjectAsyncCapability`), with the streams in the multithreaded
+apartment so that no read waits on the UI thread. Other platforms offer
+nothing for them yet: there, offer a file list of local copies.
+
 `Drag(value)` alone stays within its window. Combining it with `DragData`
 also offers its Go value to existing `Drop[T]` and `DragOver[T]` targets in
 other windows of the same process. Those typed targets accept copy. A
@@ -193,7 +216,7 @@ The image is copied at drag start; one image pixel represents one DIP.
 |---|---|---|
 | macOS | AppKit dragging sessions and pasteboard item providers | Text/HTML/PNG/file URLs use system UTIs. MIME names map through `UTType`, with a reversible identifier fallback. Item boundaries are preserved. |
 | Linux | GTK 3 drag contexts and asynchronous selections | MIME targets, UTF8_STRING for text, text/uri-list for URLs and files. Accepted formats are requested after drop. |
-| Windows | OLE IDataObject / IDropSource / IDropTarget | Unicode text, CF_HDROP, URL, CF_HTML, PNG and registered custom names; delayed rendering and Shell drag images. Streams preserve exact binary lengths; HGLOBAL sources may include padding. |
+| Windows | OLE IDataObject / IDropSource / IDropTarget | Unicode text, CF_HDROP, URL, CF_HTML, PNG, virtual files (FileGroupDescriptorW, FileContents) and registered custom names; delayed rendering and Shell drag images. Streams preserve exact binary lengths; HGLOBAL sources may include padding. |
 | Browsers | Files dropped on the canvas, read as they drop (see [browsers](browsers.md)) | Files only, at paths of the backend's that `os` reads. Other drags, and drags out of the window, have no transfer. |
 
 GTK and OLE have a single selection/data object: multiple text items are
@@ -201,7 +224,7 @@ joined by newlines, URI/file lists by CRLF, and other formats use the first
 item offering them. Transfers between windows in the same MyGo process
 preserve all items through the core's local registry. Incoming GTK/OLE
 representations are limited to 64 MiB each; native providers must supply
-memory or stream representations (virtual-file promises are not supported).
+memory or stream representations. Virtual files go out on Windows only.
 
 See [`examples/drag-drop`](../../examples/drag-drop) for two windows exchanging
 notes, files, text and URLs, including a lazy JSON representation and move

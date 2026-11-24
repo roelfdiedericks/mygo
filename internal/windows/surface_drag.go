@@ -51,7 +51,9 @@ var (
 var unicodeTextLineEndings = strings.NewReplacer("\r\n", "\r\n", "\r", "\r\n", "\n", "\r\n")
 
 type dragDataObject struct {
-	vtbl      *[12]uintptr
+	vtbl *[12]uintptr
+	// asyncVtbl is IDataObjectAsyncCapability's, for virtual files.
+	asyncVtbl *[8]uintptr
 	refs      int32
 	providers map[uint16]func() ([]byte, error)
 	formats   []uint16
@@ -60,6 +62,8 @@ type dragDataObject struct {
 	clipboard bool
 	concealed bool
 	onRelease func()
+	virtual   []transfer.VirtualFile
+	async     dragAsync
 }
 type oleDragSource struct {
 	vtbl     *[5]uintptr
@@ -85,8 +89,18 @@ func initDataSource() {
 		return sOK
 	}
 	notImpl := syscall.NewCallback(func(this, a, b uintptr) uintptr { return eNotImpl })
+	initDragAsync()
 	dragDataVtbl = [12]uintptr{
-		syscall.NewCallback(func(this, riid, out uintptr) uintptr { return query(this, riid, out, iidIDataObject) }),
+		syscall.NewCallback(func(this, riid, out uintptr) uintptr {
+			// Virtual files say the destination can copy them on a thread
+			// of its own (surface_drag_virtual.go).
+			if *(*GUID)(native(riid)) == iidIDataObjectAsyncCapability && len(dragObjects[this].virtual) > 0 {
+				*(*uintptr)(native(out)) = this + unsafe.Offsetof(dragDataObject{}.asyncVtbl)
+				addRef(this)
+				return sOK
+			}
+			return query(this, riid, out, iidIDataObject)
+		}),
 		syscall.NewCallback(func(this uintptr) uintptr { d := dragObjects[this]; d.refs++; return uintptr(d.refs) }),
 		syscall.NewCallback(func(this uintptr) uintptr {
 			d := dragObjects[this]
@@ -96,7 +110,7 @@ func initDataSource() {
 				for _, m := range d.extra {
 					procReleaseStgMedium.Call(uintptr(unsafe.Pointer(&m)))
 				}
-				d.providers, d.extra = nil, nil
+				d.providers, d.extra, d.virtual = nil, nil, nil
 				if fn := d.onRelease; fn != nil {
 					d.onRelease = nil
 					fn()
@@ -110,6 +124,14 @@ func initDataSource() {
 			*(*stgMedium)(native(medium)) = stgMedium{}
 			if f.Format == cfBitmap && d.providers[cfBitmap] != nil {
 				return d.renderBitmap(f, (*stgMedium)(native(medium)))
+			}
+			if file, ok := d.fileContentsFormat(f); ok {
+				stream, ok := fileContents(file)
+				if !ok {
+					return eFail
+				}
+				*(*stgMedium)(native(medium)) = stgMedium{Tymed: tymedStream, Handle: stream}
+				return sOK
 			}
 			if !validDataFormat(f) {
 				return dvFormatEtc
@@ -166,7 +188,7 @@ func initDataSource() {
 				}
 				return dvFormatEtc
 			}
-			if validDataFormat(f) && (d.providers[f.Format] != nil || (f.Tymed&tymedHGlobal != 0 && d.extra[f.Format].Handle != 0)) {
+			if _, ok := d.fileContentsFormat(f); ok || (validDataFormat(f) && (d.providers[f.Format] != nil || (f.Tymed&tymedHGlobal != 0 && d.extra[f.Format].Handle != 0))) {
 				return sOK
 			}
 			return dvFormatEtc
@@ -206,9 +228,13 @@ func initDataSource() {
 			var formats []formatEtc
 			for _, f := range dragObjects[this].formats {
 				format := nativeFormat(f)
-				if provider := dragObjects[this].providers[f]; provider != nil && f == cfBitmap {
+				provider := dragObjects[this].providers[f]
+				switch {
+				case provider != nil && f == cfBitmap:
 					format.Tymed = tymedGDI
-				} else if provider != nil {
+				case f == cfFileContents:
+					format.Tymed = tymedStream // one per file, by its index
+				case provider != nil:
 					format.Tymed |= tymedStream
 				}
 				formats = append(formats, format)
@@ -350,8 +376,9 @@ func newDragData(r platform.DragRequest) uintptr {
 }
 
 func newTransferData(data transfer.Data, session string, clipboard, concealed bool) uintptr {
-	d := &dragDataObject{vtbl: &dragDataVtbl, refs: 1, providers: map[uint16]func() ([]byte, error){}, extra: map[uint16]stgMedium{}, clipboard: clipboard, concealed: concealed}
+	d := &dragDataObject{vtbl: &dragDataVtbl, asyncVtbl: &dragAsyncVtbl, refs: 1, providers: map[uint16]func() ([]byte, error){}, extra: map[uint16]stgMedium{}, clipboard: clipboard, concealed: concealed}
 	setTransferProviders(d, data, session)
+	d.async.on = len(d.virtual) > 0
 	p := uintptr(unsafe.Pointer(d))
 	dragObjects[p] = d
 	return p
@@ -437,6 +464,15 @@ func setTransferProviders(d *dragDataObject, data transfer.Data, session string)
 				}
 				return append(b, 0, 0), nil
 			})
+		}
+	}
+	if files := data.VirtualFiles(); len(files) > 0 && !d.clipboard {
+		// Streams by index can't be put on the clipboard as it flushes:
+		// drags only.
+		d.virtual = files
+		add(cfFileDescriptorW, func() ([]byte, error) { return fileGroupDescriptor(files), nil })
+		if !slices.Contains(d.formats, cfFileContents) {
+			d.formats = append(d.formats, cfFileContents)
 		}
 	}
 	if session != "" {

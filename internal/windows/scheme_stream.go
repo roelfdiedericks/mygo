@@ -38,6 +38,10 @@ type bodyStream struct {
 	pos    int64   // bytes read, for Seek
 	ftm    uintptr // the free-threaded marshaler aggregated, its inner IUnknown
 	cancel func()
+	// file marks the contents of a virtual file a drag offers
+	// (fileContents): not agile, as it lives in the multithreaded
+	// apartment, and its reads wait for the bytes however long it takes.
+	file bool
 }
 
 var (
@@ -112,6 +116,18 @@ func newBodyStream(pipe *schemestream.Pipe, size int64, cancel func()) uintptr {
 	return p
 }
 
+// newFileStream returns a stream reading pipe, the bytes of a virtual
+// file of size bytes, holding one reference.
+func newFileStream(pipe *schemestream.Pipe, size int64) uintptr {
+	bodyStreamOnce.Do(initBodyStreamVtbl)
+	s := &bodyStream{vtbl: &bodyStreamVtbl, refs: 1, pipe: pipe, size: size, file: true}
+	p := uintptr(unsafe.Pointer(s))
+	bodyStreamsMu.Lock()
+	bodyStreams[p] = s
+	bodyStreamsMu.Unlock()
+	return p
+}
+
 func lookupBodyStream(this uintptr) *bodyStream {
 	bodyStreamsMu.Lock()
 	defer bodyStreamsMu.Unlock()
@@ -151,7 +167,14 @@ func bodyStreamQueryInterface(this, riid, out uintptr) uintptr {
 		return eUnexpected
 	}
 	switch *(*GUID)(native(riid)) {
-	case iidIUnknown, iidISequentialStream, iidIStream, iidIAgileObject:
+	case iidIUnknown, iidISequentialStream, iidIStream:
+		*(*uintptr)(native(out)) = this
+		bodyStreamRef(this, 1)
+		return sOK
+	case iidIAgileObject:
+		if s.file {
+			return eNoInterface
+		}
 		*(*uintptr)(native(out)) = this
 		bodyStreamRef(this, 1)
 		return sOK
@@ -180,7 +203,7 @@ func bodyStreamRead(this, pv, cb, pcbRead uintptr) uintptr {
 		buf = unsafe.Slice((*byte)(native(pv)), n)
 	}
 	var wait time.Duration
-	if onUIThread() {
+	if onUIThread() && !s.file {
 		wait = uiReadWait
 	}
 	k, err := s.pipe.Read(buf, wait)

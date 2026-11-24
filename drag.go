@@ -4,6 +4,7 @@ import (
 	"errors"
 	"image"
 	"image/draw"
+	"runtime"
 	"slices"
 
 	"github.com/egoist/mygo/internal/platform"
@@ -64,7 +65,10 @@ func (w *Window) startDataDragPrepared(data transfer.Data, local any, options Dr
 		return errDragBusy
 	}
 	formats := data.Formats()
-	if len(formats) == 0 || slices.Contains(formats, platform.DragSessionFormat) {
+	// Virtual files alone make a drag where the backend offers them:
+	// Windows (transfer.VirtualFiles).
+	virtualOnly := len(formats) == 0 && len(data.VirtualFiles()) > 0 && runtime.GOOS == "windows"
+	if (len(formats) == 0 && !virtualOnly) || slices.Contains(formats, platform.DragSessionFormat) {
 		return errors.New("mygo: a data drag needs non-reserved representations")
 	}
 	operations := options.Operations.Allowed()
