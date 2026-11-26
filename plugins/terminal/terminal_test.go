@@ -733,6 +733,58 @@ func TestKeys(t *testing.T) {
 	key(0, ui.KeyUp, "", "\x1bOA")
 }
 
+// TestSendKey: a key an app sends for its own text field reaches the
+// program as the same key pressed in the view would, in the modes the
+// program asked for: Escape a lone ESC until the Kitty keyboard protocol,
+// then CSI 27 u, which the program cannot mistake for a sequence's start.
+func TestSendKey(t *testing.T) {
+	loadLib(t)
+	conn := newPipe()
+	term, err := New(Options{Conn: conn})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer term.Close()
+	key := func(mods ui.Modifiers, k ui.Key, text, want string) {
+		t.Helper()
+		if !term.SendKey(mods, k, text) {
+			t.Errorf("%v %v %q sent nothing, want %q", mods, k, text, want)
+			return
+		}
+		if got := conn.take(term); got != want {
+			t.Errorf("%v %v %q sent %q, want %q", mods, k, text, got, want)
+		}
+	}
+	key(0, ui.KeyEscape, "", "\x1b")
+	key(0, ui.KeyTab, "", "\t")
+	key(ui.Shift, ui.KeyTab, "", "\x1b[Z")
+	key(0, ui.KeyUp, "", "\x1b[A")
+	key(0, ui.KeyEnter, "", "\r")
+	key(ui.Ctrl, ui.KeyC, "", "\x03")
+	key(ui.Ctrl, ui.KeyBracketLeft, "", "\x1b")
+	key(ui.Shift, ui.KeyA, "A", "A")
+	if runtime.GOOS != "darwin" {
+		key(ui.Alt, ui.KeyB, "b", "\x1bb")
+	}
+	if term.SendKey(0, ui.KeyUnknown, "") {
+		t.Error("a key of no name sent something")
+	}
+	// The Kitty keyboard protocol, as omp asks for it.
+	term.Feed([]byte("\x1b[>1u"))
+	key(0, ui.KeyEscape, "", "\x1b[27u")
+	key(ui.Ctrl, ui.KeyC, "", "\x1b[99;5u")
+	key(0, ui.KeyEnter, "", "\r")
+	if runtime.GOOS != "darwin" {
+		key(ui.Alt, ui.KeyB, "b", "\x1b[98;3u")
+	}
+	// With releases reported (flag 2), the release follows the press.
+	term.Feed([]byte("\x1b[=3u"))
+	key(0, ui.KeyEscape, "", "\x1b[27u\x1b[27;1:3u")
+	// Programs in cursor key mode get application keys.
+	term.Feed([]byte("\x1b[=0u\x1b[?1h"))
+	key(0, ui.KeyUp, "", "\x1bOA")
+}
+
 func TestComposition(t *testing.T) {
 	loadLib(t)
 	conn := newPipe()

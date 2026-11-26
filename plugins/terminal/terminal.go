@@ -38,6 +38,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	"github.com/egoist/mygo/plugins/terminal/internal/pty"
 	"github.com/egoist/mygo/plugins/terminal/internal/vt"
@@ -558,6 +559,9 @@ type Terminal struct {
 	events  events
 	closed  bool
 	clipOut []string // what programs copied, for the view to write
+	// keys encodes the keys SendKey sends, as a view's encoder does those
+	// pressed in it.
+	keys *vt.KeyEncoder
 	// prompt is guarded by mu too; shellDir is immutable after New and removed
 	// once the program exits, including a terminal closed before it starts.
 	prompt   promptTracker
@@ -1245,6 +1249,60 @@ func (t *Terminal) Send(data []byte) {
 	}
 }
 
+// SendKey sends the program a key, pressed and let go, encoded as a key
+// pressed in a view of the terminal is: in the modes the program asked
+// for, as the Kitty keyboard protocol or xterm's modifyOtherKeys, else as
+// terminals have long sent keys. Under the Kitty protocol Escape is CSI 27
+// u, which the program tells from the start of a longer sequence; a lone
+// ESC written with Send may be taken as that start, waited on, or joined
+// with the next key into another. An app whose own text field hands the
+// program the keys the field does not keep (Escape, Tab, the arrows at its
+// edges, Control and Alt chords) sends them so.
+//
+// text is what the key types: "a" for A, "A" with Shift; with Alt as Meta
+// the key's character, which the encoding prefixes or marks; empty for a
+// key that types nothing and for Control chords. Unlike a key pressed in
+// the view, it neither scrolls to the bottom nor clears the selection. It
+// reports whether anything was sent.
+func (t *Terminal) SendKey(mods ui.Modifiers, key ui.Key, text string) bool {
+	k, unshifted := vtKey(key)
+	if k == vt.KeyUnidentified {
+		return false
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.term == nil {
+		return false
+	}
+	if t.keys == nil {
+		keys, err := vt.NewKeyEncoder()
+		if err != nil {
+			return false
+		}
+		t.keys = keys
+	}
+	t.keys.Sync(t.term, t.opts.OptionAsAlt)
+	ev := vt.KeyEvent{Action: vt.KeyPress, Key: k, Mods: vtMods(mods), Text: text, Unshifted: unshifted}
+	if r, _ := utf8.DecodeRuneInString(text); text != "" && r != unshifted {
+		// Shift or Option made the character, as the view tells it.
+		ev.Consumed = vtMods(mods & (ui.Shift | ui.Alt))
+	}
+	b := t.keys.Encode(ev)
+	if len(b) == 0 {
+		b = controlKey(ev)
+	}
+	if len(b) == 0 {
+		return false
+	}
+	t.in.push(append([]byte(nil), b...))
+	// Its release, for a program that asked to hear releases.
+	ev.Action, ev.Text, ev.Consumed = vt.KeyRelease, "", 0
+	if r := t.keys.Encode(ev); len(r) > 0 {
+		t.in.push(append([]byte(nil), r...))
+	}
+	return true
+}
+
 // Feed shows data as if the program wrote it: text and escape sequences.
 func (t *Terminal) Feed(data []byte) { t.write(data) }
 
@@ -1334,6 +1392,10 @@ func (t *Terminal) Close() error {
 	t.term = nil
 	t.rs.Free()
 	t.rs = nil
+	if t.keys != nil {
+		t.keys.Free()
+		t.keys = nil
+	}
 	t.rmu.Unlock()
 	t.mu.Unlock()
 	t.redraw()
